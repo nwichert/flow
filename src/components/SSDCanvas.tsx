@@ -1,10 +1,11 @@
 import { useState, useRef, useCallback } from 'react';
 import { toPng } from 'html-to-image';
-import { CameraIcon } from '@heroicons/react/24/solid';
+import { CameraIcon, SparklesIcon } from '@heroicons/react/24/solid';
 import { useStoryStore, type Actor, type SSDMessage } from '../store/useStoryStore';
 import { useToast } from './Toast';
 import { useConfirm } from './ConfirmDialog';
 import { useTheme } from './ThemeProvider';
+import { AISSDGenerator } from './AISSDGenerator';
 
 const LANE_WIDTH = 120;
 const LANE_GAP = 80;
@@ -45,6 +46,7 @@ export function SSDCanvas({ isSidebarOpen }: SSDCanvasProps) {
 
   const [isAddingActor, setIsAddingActor] = useState(false);
   const [isAddingMessage, setIsAddingMessage] = useState(false);
+  const [isAIOpen, setIsAIOpen] = useState(false);
   const [editingActorId, setEditingActorId] = useState<string | null>(null);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -173,10 +175,9 @@ export function SSDCanvas({ isSidebarOpen }: SSDCanvasProps) {
         <div className={`flex items-center gap-2 p-3 border-b border-slate-200 bg-white ${!isSidebarOpen ? 'pl-16' : ''}`}>
           <button
             onClick={() => setIsAddingActor(true)}
-            className="flex items-center gap-2 px-3 py-1.5 bg-white border-2 hover:opacity-80 rounded text-sm font-medium transition-opacity"
-            style={{ borderColor: colors.primary, color: colors.primary }}
+            className="flex items-center gap-2 px-4 py-2 bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] rounded-lg text-white font-medium shadow-lg transition-colors"
           >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
             </svg>
             Add Actor
@@ -184,24 +185,29 @@ export function SSDCanvas({ isSidebarOpen }: SSDCanvasProps) {
           <button
             onClick={() => setIsAddingMessage(true)}
             disabled={actors.length < 1}
-            className="flex items-center gap-2 px-3 py-1.5 rounded text-white text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            style={{ backgroundColor: colors.primary }}
-            onMouseEnter={(e) => !e.currentTarget.disabled && (e.currentTarget.style.backgroundColor = colors.primaryHover)}
-            onMouseLeave={(e) => !e.currentTarget.disabled && (e.currentTarget.style.backgroundColor = colors.primary)}
+            className="flex items-center gap-2 px-4 py-2 bg-white border-2 border-[var(--color-primary)] hover:bg-[var(--color-primary-faded)] rounded-lg text-[var(--color-primary)] font-medium shadow-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
             </svg>
             Add Message
           </button>
-          <div className="w-px h-6 bg-slate-300 mx-1" />
+          <button
+            onClick={() => setIsAIOpen(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-white border-2 border-[var(--color-primary)] hover:bg-[var(--color-primary-faded)] rounded-lg text-[var(--color-primary)] font-medium shadow-lg transition-colors"
+            title="Generate with AI"
+          >
+            <SparklesIcon className="w-5 h-5" />
+            AI Generate
+          </button>
+          <div className="w-px h-8 bg-slate-300 mx-1" />
           <button
             onClick={handleScreenshot}
             disabled={actors.length === 0}
-            className="flex items-center gap-2 px-3 py-1.5 bg-white border border-slate-300 hover:bg-slate-50 rounded text-slate-600 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-300 hover:bg-slate-50 rounded-lg text-slate-600 font-medium shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             title="Download as Image"
           >
-            <CameraIcon className="w-4 h-4" />
+            <CameraIcon className="w-5 h-5" />
           </button>
         </div>
       )}
@@ -231,27 +237,27 @@ export function SSDCanvas({ isSidebarOpen }: SSDCanvasProps) {
 
           {/* Actor headers */}
           {sortedActors.map((actor, index) => {
-            const x = PADDING + index * (LANE_WIDTH + LANE_GAP);
+            const centerX = PADDING + index * (LANE_WIDTH + LANE_GAP) + LANE_WIDTH / 2;
             const color = actorColors[actor.type];
             const isSelected = selectedId === `actor-${actor.id}`;
 
             return (
               <div
                 key={actor.id}
-                className="absolute flex items-center gap-2 group cursor-pointer"
-                style={{ left: x, top: PADDING, width: LANE_WIDTH + 40 }}
+                className="absolute flex flex-col items-center group cursor-pointer"
+                style={{ left: centerX, top: PADDING, transform: 'translateX(-50%)' }}
                 onClick={() => setSelectedId(isSelected ? null : `actor-${actor.id}`)}
               >
                 {/* Colored indicator bar */}
                 <div
-                  className="w-1 h-8 rounded-full"
+                  className="w-12 h-1 rounded-full mb-2"
                   style={{ backgroundColor: color }}
                 />
                 {/* Actor name */}
-                <span className="text-slate-700 font-medium text-sm">{actor.name}</span>
+                <span className="text-slate-700 font-medium text-sm text-center whitespace-nowrap">{actor.name}</span>
                 {/* Edit/delete buttons - show on hover or when selected */}
                 {!isPresentationMode && (
-                  <div className={`flex gap-1 ml-auto transition-opacity duration-150 ${isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
+                  <div className={`flex gap-1 mt-1 transition-opacity duration-150 ${isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
                     <button
                       onClick={(e) => { e.stopPropagation(); setEditingActorId(actor.id); }}
                       className="p-1 hover:bg-slate-200 rounded bg-white shadow-sm border border-slate-200"
@@ -774,6 +780,8 @@ export function SSDCanvas({ isSidebarOpen }: SSDCanvasProps) {
           </div>
         );
       })()}
+
+      <AISSDGenerator isOpen={isAIOpen} onClose={() => setIsAIOpen(false)} />
     </div>
   );
 }

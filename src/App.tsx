@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback } from 'react';
 import {
   ReactFlow,
   ReactFlowProvider,
@@ -23,6 +23,7 @@ import { SSDCanvas } from './components/SSDCanvas';
 import { useToast } from './components/Toast';
 import { useConfirm } from './components/ConfirmDialog';
 import { useTheme } from './components/ThemeProvider';
+import { useUrlSync } from './hooks/useUrlSync';
 import type { LayoutDirection } from './utils/layout';
 import { CameraIcon } from '@heroicons/react/24/solid';
 
@@ -283,7 +284,7 @@ function WorkflowCanvas({ isSidebarOpen }: { isSidebarOpen: boolean }) {
 }
 
 function FlowCanvas({ isSidebarOpen }: { isSidebarOpen: boolean }) {
-  const { activeStoryId, getActiveStory, isPresentationMode } = useStoryStore();
+  const { activeStoryId, getActiveStory } = useStoryStore();
   const activeStory = getActiveStory();
 
   if (!activeStoryId) {
@@ -317,9 +318,12 @@ function FlowCanvas({ isSidebarOpen }: { isSidebarOpen: boolean }) {
   );
 }
 
-function App() {
+function AppContent() {
   const { isPresentationMode } = useStoryStore();
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+
+  // Sync URL with active diagram
+  useUrlSync();
 
   return (
     <div style={{ width: '100%', height: '100%' }} className="flex bg-[#f8fafc]">
@@ -351,6 +355,10 @@ function App() {
       <FlowCanvas isSidebarOpen={isSidebarOpen} />
     </div>
   );
+}
+
+function App() {
+  return <AppContent />;
 }
 
 export default App;

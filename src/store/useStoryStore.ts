@@ -18,6 +18,15 @@ import { getLayoutedElements, type LayoutDirection } from '../utils/layout';
 // Diagram types
 export type DiagramType = 'workflow' | 'ssd';
 
+// A Project contains multiple diagrams
+export type Project = {
+  id: string;
+  name: string;
+  description: string;
+  createdAt: number;
+  updatedAt: number;
+};
+
 // A Node represents a single step/stage in a User Workflow
 export type StoryNode = {
   id: string;
@@ -50,6 +59,7 @@ export type SSDMessage = {
 // A User Story/Diagram is a complete experience
 export type UserStory = {
   id: string;
+  projectId: string;
   name: string;
   description: string;
   type: DiagramType;
@@ -64,6 +74,10 @@ export type UserStory = {
 };
 
 type StoryStore = {
+  // Projects
+  projects: Project[];
+  activeProjectId: string | null;
+
   // All user stories
   userStories: UserStory[];
   activeStoryId: string | null;
@@ -84,6 +98,14 @@ type StoryStore = {
   onEdgesChange: OnEdgesChange;
   onConnect: OnConnect;
   onReconnect: (oldEdge: Edge, newConnection: Connection) => void;
+
+  // Project CRUD
+  createProject: (name: string, description?: string) => string;
+  updateProject: (id: string, updates: Partial<Pick<Project, 'name' | 'description'>>) => void;
+  deleteProject: (id: string) => void;
+  setActiveProject: (id: string | null) => void;
+  getActiveProject: () => Project | undefined;
+  getProjectDiagrams: (projectId: string) => UserStory[];
 
   // User Story CRUD
   createUserStory: (name: string, type: DiagramType, description?: string) => string;
@@ -113,6 +135,11 @@ type StoryStore = {
   updateMessage: (id: string, updates: Partial<Omit<SSDMessage, 'id'>>) => void;
   deleteMessage: (id: string) => void;
   reorderMessages: (messageIds: string[]) => void;
+  importGeneratedSSD: (
+    generatedActors: Omit<Actor, 'id'>[],
+    generatedMessages: Omit<SSDMessage, 'id' | 'order'>[],
+    participantIdMap: Map<string, number>
+  ) => void;
 
   // Presentation controls
   startPresentation: () => void;
@@ -128,10 +155,24 @@ type StoryStore = {
 
 const generateId = () => Math.random().toString(36).substring(2, 11);
 
-const createDefaultWorkflow = (): UserStory => {
+const DEFAULT_PROJECT_ID = 'default-project';
+
+const createDefaultProject = (): Project => {
+  const now = Date.now();
+  return {
+    id: DEFAULT_PROJECT_ID,
+    name: 'My First Project',
+    description: 'A sample project to get started',
+    createdAt: now,
+    updatedAt: now,
+  };
+};
+
+const createDefaultWorkflow = (projectId: string): UserStory => {
   const now = Date.now();
   return {
     id: generateId(),
+    projectId,
     name: 'My First Workflow',
     description: 'A sample user workflow to get started',
     type: 'workflow',
@@ -192,7 +233,9 @@ const getNextId = () => `${idCounter++}`;
 export const useStoryStore = create<StoryStore>()(
   persist(
     (set, get) => ({
-      userStories: [createDefaultWorkflow()],
+      projects: [createDefaultProject()],
+      activeProjectId: DEFAULT_PROJECT_ID,
+      userStories: [createDefaultWorkflow(DEFAULT_PROJECT_ID)],
       activeStoryId: null,
       nodes: [],
       edges: [],
@@ -235,12 +278,91 @@ export const useStoryStore = create<StoryStore>()(
         get()._saveActiveStory();
       },
 
+      // Project CRUD
+      createProject: (name, description = '') => {
+        const id = generateId();
+        const now = Date.now();
+        const newProject: Project = {
+          id,
+          name,
+          description,
+          createdAt: now,
+          updatedAt: now,
+        };
+        set((state) => ({
+          projects: [...state.projects, newProject],
+          activeProjectId: id,
+          activeStoryId: null,
+          nodes: [],
+          edges: [],
+          actors: [],
+          messages: [],
+        }));
+        return id;
+      },
+
+      updateProject: (id, updates) => {
+        set((state) => ({
+          projects: state.projects.map((project) =>
+            project.id === id
+              ? { ...project, ...updates, updatedAt: Date.now() }
+              : project
+          ),
+        }));
+      },
+
+      deleteProject: (id) => {
+        const { activeProjectId, projects } = get();
+        if (projects.length <= 1) return;
+
+        const remainingProjects = projects.filter((p) => p.id !== id);
+        const newActiveProjectId = activeProjectId === id ? remainingProjects[0]?.id || null : activeProjectId;
+
+        set((state) => ({
+          projects: remainingProjects,
+          userStories: state.userStories.filter((s) => s.projectId !== id),
+          activeProjectId: newActiveProjectId,
+          activeStoryId: null,
+          nodes: [],
+          edges: [],
+          actors: [],
+          messages: [],
+        }));
+      },
+
+      setActiveProject: (id) => {
+        set({
+          activeProjectId: id,
+          activeStoryId: null,
+          nodes: [],
+          edges: [],
+          actors: [],
+          messages: [],
+          isPresentationMode: false,
+          currentStepIndex: 0,
+          presentationOrder: [],
+        });
+      },
+
+      getActiveProject: () => {
+        const { projects, activeProjectId } = get();
+        return projects.find((p) => p.id === activeProjectId);
+      },
+
+      getProjectDiagrams: (projectId) => {
+        return get().userStories.filter((s) => s.projectId === projectId);
+      },
+
       // User Story CRUD
       createUserStory: (name, type, description = '') => {
+        const { activeProjectId } = get();
+        if (!activeProjectId) return '';
+
         const id = generateId();
         const now = Date.now();
         const newStory: UserStory = {
           id,
+          projectId: activeProjectId,
           name,
           description,
           type,
@@ -271,8 +393,7 @@ export const useStoryStore = create<StoryStore>()(
       },
 
       deleteUserStory: (id) => {
-        const { activeStoryId, userStories } = get();
-        if (userStories.length <= 1) return;
+        const { activeStoryId } = get();
 
         set((state) => ({
           userStories: state.userStories.filter((s) => s.id !== id),
@@ -604,6 +725,49 @@ export const useStoryStore = create<StoryStore>()(
         get()._saveActiveStory();
       },
 
+      importGeneratedSSD: (generatedActors, generatedMessages, participantIdMap) => {
+        const { activeStoryId } = get();
+        if (!activeStoryId) return;
+
+        // Create actor ID mapping from generated IDs to new IDs
+        const actorIdMap = new Map<string, string>();
+
+        // Create actors with proper IDs
+        const newActors: Actor[] = generatedActors.map((actor, index) => {
+          const newId = getNextId();
+          // Map the generated participant ID (p1, p2, etc.) to our new ID
+          const generatedId = Array.from(participantIdMap.entries())
+            .find(([, orderIndex]) => orderIndex === index)?.[0];
+          if (generatedId) {
+            actorIdMap.set(generatedId, newId);
+          }
+          return {
+            id: newId,
+            name: actor.name,
+            type: actor.type,
+            order: actor.order,
+          };
+        });
+
+        // Create messages with mapped actor IDs
+        const newMessages: SSDMessage[] = generatedMessages.map((msg, index) => ({
+          id: getNextId(),
+          fromActorId: actorIdMap.get(msg.fromActorId) || msg.fromActorId,
+          toActorId: actorIdMap.get(msg.toActorId) || msg.toActorId,
+          label: msg.label,
+          description: msg.description,
+          type: msg.type,
+          order: index + 1,
+        }));
+
+        set({
+          actors: newActors,
+          messages: newMessages,
+          presentationOrder: getMessagePresentationOrder(newMessages),
+        });
+        get()._saveActiveStory();
+      },
+
       // Presentation
       startPresentation: () => {
         const story = get().getActiveStory();
@@ -678,20 +842,40 @@ export const useStoryStore = create<StoryStore>()(
     {
       name: 'user-stories-storage',
       partialize: (state) => ({
+        projects: state.projects,
+        activeProjectId: state.activeProjectId,
         userStories: state.userStories,
         activeStoryId: state.activeStoryId,
       }),
       onRehydrateStorage: () => (state) => {
-        if (state && state.activeStoryId) {
-          const story = state.userStories.find((s: UserStory) => s.id === state.activeStoryId);
-          if (story) {
-            state.nodes = story.nodes;
-            state.edges = story.edges;
-            state.actors = story.actors || [];
-            state.messages = story.messages || [];
-            state.presentationOrder = (story.type === 'workflow' || story.type === undefined)
-              ? getPresentationOrder(story.nodes)
-              : getMessagePresentationOrder(story.messages || []);
+        if (state) {
+          // Ensure projects exist
+          if (!state.projects || state.projects.length === 0) {
+            state.projects = [createDefaultProject()];
+            state.activeProjectId = DEFAULT_PROJECT_ID;
+          }
+
+          // Always migrate stories without projectId to the first available project
+          const defaultProjectId = state.activeProjectId || state.projects[0]?.id || DEFAULT_PROJECT_ID;
+          const hasStoriesWithoutProject = state.userStories.some((s: UserStory) => !s.projectId);
+          if (hasStoriesWithoutProject) {
+            state.userStories = state.userStories.map((s: UserStory) => ({
+              ...s,
+              projectId: s.projectId || defaultProjectId,
+            }));
+          }
+
+          if (state.activeStoryId) {
+            const story = state.userStories.find((s: UserStory) => s.id === state.activeStoryId);
+            if (story) {
+              state.nodes = story.nodes;
+              state.edges = story.edges;
+              state.actors = story.actors || [];
+              state.messages = story.messages || [];
+              state.presentationOrder = (story.type === 'workflow' || story.type === undefined)
+                ? getPresentationOrder(story.nodes)
+                : getMessagePresentationOrder(story.messages || []);
+            }
           }
         }
       },

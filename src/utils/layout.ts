@@ -6,11 +6,11 @@ export type LayoutDirection = 'TB' | 'LR' | 'BT' | 'RL';
 const NODE_WIDTH = 256; // w-64 = 16rem = 256px
 const NODE_HEIGHT = 120;
 
-export function getLayoutedElements(
-  nodes: Node[],
+export function getLayoutedElements<T extends Record<string, unknown> = Record<string, unknown>>(
+  nodes: Node<T>[],
   edges: Edge[],
   direction: LayoutDirection = 'TB'
-): { nodes: Node[]; edges: Edge[] } {
+): { nodes: Node<T>[]; edges: Edge[] } {
   const g = new Dagre.graphlib.Graph().setDefaultEdgeLabel(() => ({}));
 
   g.setGraph({
@@ -47,5 +47,5 @@ export function getLayoutedElements(
     };
   });
 
-  return { nodes: layoutedNodes as Node[], edges };
+  return { nodes: layoutedNodes as Node<T>[], edges };
 }
