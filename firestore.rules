@@ -1,0 +1,15 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Allow all reads and writes for now (no auth implemented yet)
+    // TODO: Add authentication and restrict access
+    match /projects/{projectId} {
+      allow read, write: if true;
+    }
+
+    match /diagrams/{diagramId} {
+      allow read, write: if true;
+    }
+  }
+}

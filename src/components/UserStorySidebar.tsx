@@ -65,9 +65,9 @@ export function UserStorySidebar({ onClose }: UserStorySidebarProps) {
     });
   };
 
-  const handleCreateProject = () => {
+  const handleCreateProject = async () => {
     if (!newProjectName.trim()) return;
-    const id = createProject(newProjectName);
+    const id = await createProject(newProjectName);
     setExpandedProjects((prev) => new Set(prev).add(id));
     setNewProjectName('');
     setIsCreatingProject(false);
@@ -79,9 +79,9 @@ export function UserStorySidebar({ onClose }: UserStorySidebarProps) {
     setEditProjectName(project.name);
   };
 
-  const handleSaveEditProject = () => {
+  const handleSaveEditProject = async () => {
     if (!editingProjectId || !editProjectName.trim()) return;
-    updateProject(editingProjectId, { name: editProjectName });
+    await updateProject(editingProjectId, { name: editProjectName });
     setEditingProjectId(null);
     showToast('Project updated');
   };
@@ -100,7 +100,7 @@ export function UserStorySidebar({ onClose }: UserStorySidebarProps) {
       variant: 'danger',
     });
     if (confirmed) {
-      deleteProject(id);
+      await deleteProject(id);
       showToast(`Deleted "${project?.name || 'project'}"`);
     }
   };
@@ -110,9 +110,9 @@ export function UserStorySidebar({ onClose }: UserStorySidebarProps) {
     setCreationStep('enter-details');
   };
 
-  const handleCreate = () => {
+  const handleCreate = async () => {
     if (!newName.trim()) return;
-    const id = createUserStory(newName, selectedType, newDescription);
+    const id = await createUserStory(newName, selectedType, newDescription);
     setActiveStory(id);
     setNewName('');
     setNewDescription('');
@@ -132,9 +132,9 @@ export function UserStorySidebar({ onClose }: UserStorySidebarProps) {
     setEditDescription(story.description);
   };
 
-  const handleSaveEdit = () => {
+  const handleSaveEdit = async () => {
     if (!editingId || !editName.trim()) return;
-    updateUserStory(editingId, { name: editName, description: editDescription });
+    await updateUserStory(editingId, { name: editName, description: editDescription });
     setEditingId(null);
     showToast('Diagram updated');
   };
@@ -148,7 +148,7 @@ export function UserStorySidebar({ onClose }: UserStorySidebarProps) {
       variant: 'danger',
     });
     if (confirmed) {
-      deleteUserStory(id);
+      await deleteUserStory(id);
       showToast(`Deleted "${story?.name || 'diagram'}"`);
     }
   };
@@ -393,9 +393,9 @@ export function UserStorySidebar({ onClose }: UserStorySidebarProps) {
                                   </svg>
                                 </button>
                                 <button
-                                  onClick={(e) => {
+                                  onClick={async (e) => {
                                     e.stopPropagation();
-                                    duplicateUserStory(story.id);
+                                    await duplicateUserStory(story.id);
                                     showToast(`Duplicated "${story.name}"`);
                                   }}
                                   className="p-1 hover:bg-white/10 rounded"

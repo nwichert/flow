@@ -1,11 +1,12 @@
 import { useState, useRef, useCallback } from 'react';
 import { toPng } from 'html-to-image';
-import { CameraIcon, SparklesIcon } from '@heroicons/react/24/solid';
+import { CameraIcon, SparklesIcon, DocumentTextIcon } from '@heroicons/react/24/solid';
 import { useStoryStore, type Actor, type SSDMessage } from '../store/useStoryStore';
 import { useToast } from './Toast';
 import { useConfirm } from './ConfirmDialog';
 import { useTheme } from './ThemeProvider';
 import { AISSDGenerator } from './AISSDGenerator';
+import { SummaryModal } from './SummaryModal';
 
 const LANE_WIDTH = 120;
 const LANE_GAP = 80;
@@ -32,7 +33,10 @@ export function SSDCanvas({ isSidebarOpen }: SSDCanvasProps) {
     isPresentationMode,
     currentStepIndex,
     presentationOrder,
+    getActiveStory,
+    saveDiagramSummary,
   } = useStoryStore();
+  const activeStory = getActiveStory();
   const { showToast } = useToast();
   const { confirm } = useConfirm();
   const { colors } = useTheme();
@@ -47,6 +51,7 @@ export function SSDCanvas({ isSidebarOpen }: SSDCanvasProps) {
   const [isAddingActor, setIsAddingActor] = useState(false);
   const [isAddingMessage, setIsAddingMessage] = useState(false);
   const [isAIOpen, setIsAIOpen] = useState(false);
+  const [isSummaryOpen, setIsSummaryOpen] = useState(false);
   const [editingActorId, setEditingActorId] = useState<string | null>(null);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -169,10 +174,10 @@ export function SSDCanvas({ isSidebarOpen }: SSDCanvasProps) {
   const activationBars = getActivationBars();
 
   return (
-    <div className="flex-1 h-full flex flex-col bg-[#f8fafc]">
-      {/* Toolbar */}
+    <div className="flex-1 h-full flex flex-col bg-[#f8fafc] overflow-hidden">
+      {/* Toolbar - fixed at top */}
       {!isPresentationMode && (
-        <div className={`flex items-center gap-2 p-3 border-b border-slate-200 bg-white ${!isSidebarOpen ? 'pl-16' : ''}`}>
+        <div className={`flex-shrink-0 flex items-center gap-2 p-3 border-b border-slate-200 bg-white ${!isSidebarOpen ? 'pl-16' : ''}`}>
           <button
             onClick={() => setIsAddingActor(true)}
             className="flex items-center gap-2 px-4 py-2 bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] rounded-lg text-white font-medium shadow-lg transition-colors"
@@ -201,6 +206,14 @@ export function SSDCanvas({ isSidebarOpen }: SSDCanvasProps) {
             AI Generate
           </button>
           <div className="w-px h-8 bg-slate-300 mx-1" />
+          <button
+            onClick={() => setIsSummaryOpen(true)}
+            disabled={messages.length === 0}
+            className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-300 hover:bg-slate-50 rounded-lg text-slate-600 font-medium shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            title="Generate Summary"
+          >
+            <DocumentTextIcon className="w-5 h-5" />
+          </button>
           <button
             onClick={handleScreenshot}
             disabled={actors.length === 0}
@@ -300,11 +313,21 @@ export function SSDCanvas({ isSidebarOpen }: SSDCanvasProps) {
           {/* SVG for lifelines, activation bars, and arrows */}
           <svg className="absolute inset-0 pointer-events-none" style={{ width: canvasWidth, height: canvasHeight }}>
             <defs>
+              {/* Filled arrowhead pointing right - for sync requests */}
               <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
                 <polygon points="0 0, 10 3.5, 0 7" fill="#64748b" />
               </marker>
+              {/* Filled arrowhead pointing left - for sync requests going right-to-left */}
               <marker id="arrowhead-left" markerWidth="10" markerHeight="7" refX="1" refY="3.5" orient="auto">
                 <polygon points="10 0, 0 3.5, 10 7" fill="#64748b" />
+              </marker>
+              {/* Open arrowhead pointing right - for return/async messages */}
+              <marker id="arrowhead-open" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+                <polyline points="0 0, 10 3.5, 0 7" fill="none" stroke="#64748b" strokeWidth="1.5" />
+              </marker>
+              {/* Open arrowhead pointing left - for return/async messages going right-to-left */}
+              <marker id="arrowhead-open-left" markerWidth="10" markerHeight="7" refX="1" refY="3.5" orient="auto">
+                <polyline points="10 0, 0 3.5, 10 7" fill="none" stroke="#64748b" strokeWidth="1.5" />
               </marker>
             </defs>
 
@@ -360,9 +383,10 @@ export function SSDCanvas({ isSidebarOpen }: SSDCanvasProps) {
               const isReturn = message.type === 'return';
 
               if (isSelfMessage) {
-                // Self-message: loop arrow
+                // Self-message: loop arrow going out and returning
                 const loopWidth = 40;
                 const loopHeight = 30;
+                const useOpenArrow = isReturn || message.type === 'async';
                 return (
                   <g key={`arrow-${message.id}`}>
                     <path
@@ -373,7 +397,8 @@ export function SSDCanvas({ isSidebarOpen }: SSDCanvasProps) {
                       fill="none"
                       stroke="#64748b"
                       strokeWidth={1.5}
-                      markerEnd="url(#arrowhead-left)"
+                      strokeDasharray={isReturn ? "6,3" : ""}
+                      markerEnd={useOpenArrow ? "url(#arrowhead-open-left)" : "url(#arrowhead-left)"}
                     />
                   </g>
                 );
@@ -382,6 +407,15 @@ export function SSDCanvas({ isSidebarOpen }: SSDCanvasProps) {
               const isLeftToRight = fromX < toX;
               const startX = isLeftToRight ? fromX + 4 : fromX - 4;
               const endX = isLeftToRight ? toX - 4 : toX + 4;
+
+              // Determine arrowhead based on message type
+              const useOpenArrow = isReturn || message.type === 'async';
+              let arrowhead: string;
+              if (useOpenArrow) {
+                arrowhead = isLeftToRight ? "url(#arrowhead-open)" : "url(#arrowhead-open-left)";
+              } else {
+                arrowhead = isLeftToRight ? "url(#arrowhead)" : "url(#arrowhead-left)";
+              }
 
               return (
                 <g key={`arrow-${message.id}`}>
@@ -393,7 +427,7 @@ export function SSDCanvas({ isSidebarOpen }: SSDCanvasProps) {
                     stroke="#64748b"
                     strokeWidth={1.5}
                     strokeDasharray={isReturn ? "6,3" : ""}
-                    markerEnd={isLeftToRight ? "url(#arrowhead)" : "url(#arrowhead-left)"}
+                    markerEnd={arrowhead}
                   />
                 </g>
               );
@@ -440,21 +474,27 @@ export function SSDCanvas({ isSidebarOpen }: SSDCanvasProps) {
                 style={{
                   left: boxLeft,
                   top: y,
-                  width: Math.max(boxWidth, 80),
+                  width: isActive && message.description ? Math.max(boxWidth, 200) : Math.max(boxWidth, 80),
                 }}
                 onClick={() => !isPresentationMode && setSelectedId(isSelected ? null : `message-${message.id}`)}
               >
                 <div
                   className={`
                     bg-white border rounded-lg px-3 py-2 shadow-sm transition-all
-                    ${isActive ? 'border-violet-500 ring-2 ring-violet-200' : 'border-slate-300'}
+                    ${isActive ? 'border-violet-500 ring-2 ring-violet-200 scale-105' : 'border-slate-300'}
                     ${isSelected && !isPresentationMode ? 'ring-2 ring-violet-200 border-violet-400' : ''}
                     ${!isPresentationMode ? 'hover:border-slate-400' : ''}
                   `}
                 >
-                  <p className="text-slate-700 text-sm text-center leading-tight">
+                  <p className="text-slate-700 text-sm text-center leading-tight font-medium">
                     {message.label}
                   </p>
+                  {/* Show description in presentation mode for active message, or when selected */}
+                  {message.description && (isActive || isSelected) && (
+                    <p className="text-slate-500 text-xs text-center mt-1 leading-snug">
+                      {message.description}
+                    </p>
+                  )}
                 </div>
 
                 {/* Edit/delete buttons - show on hover or when selected */}
@@ -782,6 +822,22 @@ export function SSDCanvas({ isSidebarOpen }: SSDCanvasProps) {
       })()}
 
       <AISSDGenerator isOpen={isAIOpen} onClose={() => setIsAIOpen(false)} />
+
+      {activeStory && (
+        <SummaryModal
+          isOpen={isSummaryOpen}
+          onClose={() => setIsSummaryOpen(false)}
+          diagramData={{
+            type: 'ssd',
+            name: activeStory.name,
+            description: activeStory.description,
+            actors,
+            messages,
+          }}
+          initialSummary={activeStory.summary}
+          onSummaryGenerated={saveDiagramSummary}
+        />
+      )}
     </div>
   );
 }

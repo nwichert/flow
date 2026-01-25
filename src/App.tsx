@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import {
   ReactFlow,
   ReactFlowProvider,
@@ -25,7 +25,8 @@ import { useConfirm } from './components/ConfirmDialog';
 import { useTheme } from './components/ThemeProvider';
 import { useUrlSync } from './hooks/useUrlSync';
 import type { LayoutDirection } from './utils/layout';
-import { CameraIcon } from '@heroicons/react/24/solid';
+import { CameraIcon, DocumentTextIcon } from '@heroicons/react/24/solid';
+import { SummaryModal } from './components/SummaryModal';
 
 const nodeTypes = {
   storyNode: StoryNode,
@@ -59,13 +60,17 @@ function WorkflowCanvas({ isSidebarOpen }: { isSidebarOpen: boolean }) {
     autoLayout,
     deleteNode,
     duplicateNode,
+    getActiveStory,
+    saveDiagramSummary,
   } = useStoryStore();
 
+  const activeStory = getActiveStory();
   const { fitView } = useReactFlow();
   const { showToast } = useToast();
   const { confirm } = useConfirm();
   const { colors } = useTheme();
   const [contextMenu, setContextMenu] = useState<ContextMenu>(null);
+  const [isSummaryOpen, setIsSummaryOpen] = useState(false);
 
   // Compute presentation order from nodes if store's order is empty
   const effectivePresentationOrder = presentationOrder.length > 0
@@ -221,6 +226,14 @@ function WorkflowCanvas({ isSidebarOpen }: { isSidebarOpen: boolean }) {
                 >
                   <CameraIcon className="w-4 h-4" />
                 </button>
+                <button
+                  onClick={() => setIsSummaryOpen(true)}
+                  disabled={nodes.length === 0}
+                  className="p-1.5 hover:bg-slate-100 rounded text-slate-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  title="Generate Summary"
+                >
+                  <DocumentTextIcon className="w-4 h-4" />
+                </button>
               </div>
             </Panel>
           </>
@@ -279,6 +292,22 @@ function WorkflowCanvas({ isSidebarOpen }: { isSidebarOpen: boolean }) {
           </button>
         </div>
       )}
+
+      {/* Summary Modal */}
+      {activeStory && (
+        <SummaryModal
+          isOpen={isSummaryOpen}
+          onClose={() => setIsSummaryOpen(false)}
+          diagramData={{
+            type: 'workflow',
+            name: activeStory.name,
+            description: activeStory.description,
+            nodes,
+          }}
+          initialSummary={activeStory.summary}
+          onSummaryGenerated={saveDiagramSummary}
+        />
+      )}
     </div>
   );
 }
@@ -305,7 +334,7 @@ function FlowCanvas({ isSidebarOpen }: { isSidebarOpen: boolean }) {
 
   if (activeStory?.type === 'ssd') {
     return (
-      <div className="flex-1 flex flex-col" style={{ height: '100%' }}>
+      <div className="flex-1 flex flex-col overflow-hidden" style={{ height: '100%' }}>
         <SSDCanvas isSidebarOpen={isSidebarOpen} />
       </div>
     );
@@ -319,11 +348,32 @@ function FlowCanvas({ isSidebarOpen }: { isSidebarOpen: boolean }) {
 }
 
 function AppContent() {
-  const { isPresentationMode } = useStoryStore();
+  const { isPresentationMode, isLoading, initializeStore } = useStoryStore();
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const { colors } = useTheme();
+
+  // Initialize store from Firestore
+  useEffect(() => {
+    initializeStore();
+  }, [initializeStore]);
 
   // Sync URL with active diagram
   useUrlSync();
+
+  // Show loading state
+  if (isLoading) {
+    return (
+      <div style={{ width: '100%', height: '100%' }} className="flex items-center justify-center bg-[#f8fafc]">
+        <div className="flex flex-col items-center gap-4">
+          <div
+            className="w-12 h-12 border-4 border-t-transparent rounded-full animate-spin"
+            style={{ borderColor: colors.primary, borderTopColor: 'transparent' }}
+          />
+          <p className="text-slate-600 font-medium">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{ width: '100%', height: '100%' }} className="flex bg-[#f8fafc]">

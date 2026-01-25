@@ -199,11 +199,13 @@ export function StoryNode({ data, id, selected }: NodeProps<Node<StoryNodeType>>
       )}
 
       <div
-        className={`w-64 p-3 rounded-lg border-2 shadow-lg transition-all duration-300 bg-white border-[var(--color-primary)] ${
+        className={`p-3 rounded-lg border-2 shadow-lg transition-all duration-300 bg-white border-[var(--color-primary)] ${
           isPresentationMode && isActive
-            ? 'ring-4 ring-[var(--color-primary)]/40 scale-105 shadow-xl'
-            : ''
-        } ${isDimmed ? 'opacity-40' : ''} ${selected ? 'w-72' : ''}`}
+            ? 'ring-4 ring-[var(--color-primary)]/40 scale-105 shadow-xl w-80'
+            : isPresentationMode
+            ? 'w-72'
+            : 'w-64'
+        } ${isDimmed ? 'opacity-40' : ''} ${selected && !isPresentationMode ? 'w-72' : ''}`}
       >
         {/* Top handle */}
         <Handle
@@ -234,7 +236,7 @@ export function StoryNode({ data, id, selected }: NodeProps<Node<StoryNodeType>>
 
         <h3 className="font-semibold text-slate-800 text-sm leading-tight mb-2">{data.title}</h3>
 
-        <p className={`text-slate-600 text-xs mb-3 ${selected ? '' : 'line-clamp-2'}`}>{data.description}</p>
+        <p className={`text-slate-600 text-xs mb-3 ${(selected || isPresentationMode) ? '' : 'line-clamp-2'}`}>{data.description}</p>
 
         <div className="flex items-center justify-end">
           <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${priorityBadges[data.priority]}`}>
