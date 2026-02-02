@@ -1,12 +1,14 @@
 import { useState, useRef, useCallback } from 'react';
 import { toPng } from 'html-to-image';
-import { CameraIcon, SparklesIcon, DocumentTextIcon } from '@heroicons/react/24/solid';
-import { useStoryStore, type Actor, type SSDMessage } from '../store/useStoryStore';
+import { CameraIcon, SparklesIcon, DocumentTextIcon, LightBulbIcon } from '@heroicons/react/24/solid';
+import { useStoryStore, type Actor, type SSDMessage, type DiagramType } from '../store/useStoryStore';
 import { useToast } from './Toast';
 import { useConfirm } from './ConfirmDialog';
 import { useTheme } from './ThemeProvider';
 import { AISSDGenerator } from './AISSDGenerator';
 import { SummaryModal } from './SummaryModal';
+import { classifyDiagramType, type DiagramClassification } from '../utils/classifyDiagram';
+import { DiagramSuggestionModal } from './DiagramSuggestionModal';
 
 const LANE_WIDTH = 120;
 const LANE_GAP = 80;
@@ -35,6 +37,10 @@ export function SSDCanvas({ isSidebarOpen }: SSDCanvasProps) {
     presentationOrder,
     getActiveStory,
     saveDiagramSummary,
+    activeProjectId,
+    createUserStory,
+    setActiveStory,
+    deleteUserStory,
   } = useStoryStore();
   const activeStory = getActiveStory();
   const { showToast } = useToast();
@@ -55,6 +61,9 @@ export function SSDCanvas({ isSidebarOpen }: SSDCanvasProps) {
   const [editingActorId, setEditingActorId] = useState<string | null>(null);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [isEvaluating, setIsEvaluating] = useState(false);
+  const [classification, setClassification] = useState<DiagramClassification | null>(null);
+  const [showSuggestionModal, setShowSuggestionModal] = useState(false);
 
   const [newActorName, setNewActorName] = useState('');
   const [newActorType, setNewActorType] = useState<Actor['type']>('system');
@@ -87,6 +96,69 @@ export function SSDCanvas({ isSidebarOpen }: SSDCanvasProps) {
       console.error('Failed to capture screenshot:', err);
     }
   }, [actors.length]);
+
+  const handleReEvaluate = useCallback(async () => {
+    // Build description from diagram content if none exists
+    let descriptionToEvaluate = activeStory?.description || '';
+
+    if (!descriptionToEvaluate && (actors.length > 0 || messages.length > 0)) {
+      // Generate description from actors and messages
+      const actorNames = actors.map(a => `${a.name} (${a.type})`).join(', ');
+      const messageDescriptions = messages.map(m => {
+        const fromActor = actors.find(a => a.id === m.fromActorId)?.name || 'Unknown';
+        const toActor = actors.find(a => a.id === m.toActorId)?.name || 'Unknown';
+        return `${fromActor} -> ${toActor}: ${m.label}`;
+      }).join('; ');
+      descriptionToEvaluate = `Sequence diagram with actors: ${actorNames}. Messages: ${messageDescriptions}`;
+    }
+
+    if (!descriptionToEvaluate) {
+      showToast('Add some actors or messages to the diagram first', 'warning');
+      return;
+    }
+
+    setIsEvaluating(true);
+    try {
+      const result = await classifyDiagramType(descriptionToEvaluate, 'ssd');
+
+      if (result.recommendedType !== 'ssd') {
+        setClassification(result);
+        setShowSuggestionModal(true);
+      } else {
+        showToast('This sequence diagram type is the best fit for your content');
+      }
+    } catch (err) {
+      showToast('Failed to evaluate diagram type', 'error');
+    } finally {
+      setIsEvaluating(false);
+    }
+  }, [activeStory, actors, messages, showToast]);
+
+  const handleAcceptSuggestion = async (suggestedType: DiagramType) => {
+    setShowSuggestionModal(false);
+
+    if (!activeProjectId || !activeStory) return;
+
+    const confirmed = await confirm({
+      title: 'Switch Diagram Type',
+      message: `This will create a new ${suggestedType} diagram and delete the current sequence diagram. Continue?`,
+      confirmText: 'Switch',
+      variant: 'danger',
+    });
+
+    if (confirmed) {
+      const newId = await createUserStory(activeStory.name, suggestedType, activeStory.description);
+      const oldId = activeStory.id;
+      setActiveStory(newId);
+      await deleteUserStory(oldId);
+      showToast(`Switched to ${suggestedType} diagram`);
+    }
+  };
+
+  const handleKeepOriginal = () => {
+    setShowSuggestionModal(false);
+    showToast('Keeping current sequence diagram');
+  };
 
   const sortedActors = [...actors].sort((a, b) => a.order - b.order);
   const sortedMessages = [...messages].sort((a, b) => a.order - b.order);
@@ -221,6 +293,21 @@ export function SSDCanvas({ isSidebarOpen }: SSDCanvasProps) {
             title="Download as Image"
           >
             <CameraIcon className="w-5 h-5" />
+          </button>
+          <button
+            onClick={handleReEvaluate}
+            disabled={isEvaluating}
+            className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-300 hover:bg-slate-50 rounded-lg text-yellow-500 font-medium shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            title="Re-evaluate diagram type"
+          >
+            {isEvaluating ? (
+              <svg className="animate-spin w-5 h-5" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+              </svg>
+            ) : (
+              <LightBulbIcon className="w-5 h-5" />
+            )}
           </button>
         </div>
       )}
@@ -836,6 +923,18 @@ export function SSDCanvas({ isSidebarOpen }: SSDCanvasProps) {
           }}
           initialSummary={activeStory.summary}
           onSummaryGenerated={saveDiagramSummary}
+        />
+      )}
+
+      {/* Re-evaluate Suggestion Modal */}
+      {classification && (
+        <DiagramSuggestionModal
+          isOpen={showSuggestionModal}
+          onClose={() => setShowSuggestionModal(false)}
+          classification={classification}
+          requestedType="ssd"
+          onAcceptSuggestion={handleAcceptSuggestion}
+          onKeepOriginal={handleKeepOriginal}
         />
       )}
     </div>

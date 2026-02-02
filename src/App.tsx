@@ -14,28 +14,34 @@ import { toPng } from 'html-to-image';
 
 import '@xyflow/react/dist/style.css';
 
-import { useStoryStore } from './store/useStoryStore';
+import { useStoryStore, type DiagramType } from './store/useStoryStore';
 import { StoryNode } from './components/StoryNode';
+import { AnnotationNode } from './components/AnnotationNode';
 import { AddNodePanel } from './components/AddNodePanel';
 import { PresentationControls } from './components/PresentationControls';
 import { UserStorySidebar } from './components/UserStorySidebar';
 import { SSDCanvas } from './components/SSDCanvas';
+import { StateDiagramCanvas } from './components/StateDiagramCanvas';
+import { ERDCanvas } from './components/ERDCanvas';
 import { useToast } from './components/Toast';
 import { useConfirm } from './components/ConfirmDialog';
 import { useTheme } from './components/ThemeProvider';
 import { useUrlSync } from './hooks/useUrlSync';
 import type { LayoutDirection } from './utils/layout';
-import { CameraIcon, DocumentTextIcon } from '@heroicons/react/24/solid';
+import { CameraIcon, DocumentTextIcon, LightBulbIcon } from '@heroicons/react/24/solid';
 import { SummaryModal } from './components/SummaryModal';
+import { classifyDiagramType, type DiagramClassification } from './utils/classifyDiagram';
+import { DiagramSuggestionModal } from './components/DiagramSuggestionModal';
 
 const nodeTypes = {
   storyNode: StoryNode,
+  annotationNode: AnnotationNode,
 };
 
-// Default edge options - using React Flow's default pink color
+// Default edge options
 const defaultEdgeOptions = {
   type: 'smoothstep',
-  style: { strokeWidth: 2 },
+  style: { strokeWidth: 2, stroke: '#ff0071' },
   reconnectable: true,
 };
 
@@ -62,6 +68,11 @@ function WorkflowCanvas({ isSidebarOpen }: { isSidebarOpen: boolean }) {
     duplicateNode,
     getActiveStory,
     saveDiagramSummary,
+    activeProjectId,
+    createUserStory,
+    setActiveStory,
+    deleteUserStory,
+    updateEdgeTypes,
   } = useStoryStore();
 
   const activeStory = getActiveStory();
@@ -71,6 +82,9 @@ function WorkflowCanvas({ isSidebarOpen }: { isSidebarOpen: boolean }) {
   const { colors } = useTheme();
   const [contextMenu, setContextMenu] = useState<ContextMenu>(null);
   const [isSummaryOpen, setIsSummaryOpen] = useState(false);
+  const [isEvaluating, setIsEvaluating] = useState(false);
+  const [classification, setClassification] = useState<DiagramClassification | null>(null);
+  const [showSuggestionModal, setShowSuggestionModal] = useState(false);
 
   // Compute presentation order from nodes if store's order is empty
   const effectivePresentationOrder = presentationOrder.length > 0
@@ -80,6 +94,21 @@ function WorkflowCanvas({ isSidebarOpen }: { isSidebarOpen: boolean }) {
   // Filter edges in presentation mode - only show edges where both nodes are visible
   const visibleEdges = isPresentationMode
     ? edges.filter((edge) => {
+        // Annotation edges are always visible in presentation mode
+        const sourceNode = nodes.find((n) => n.id === edge.source);
+        const targetNode = nodes.find((n) => n.id === edge.target);
+        const isAnnotationEdge =
+          sourceNode?.data?.nodeKind === 'annotation' ||
+          targetNode?.data?.nodeKind === 'annotation';
+
+        if (isAnnotationEdge) {
+          // Show annotation edge if the non-annotation endpoint is visible
+          const otherNode = sourceNode?.data?.nodeKind === 'annotation' ? targetNode : sourceNode;
+          if (otherNode?.data?.nodeKind === 'annotation') return true; // both annotations
+          const otherIndex = effectivePresentationOrder.indexOf(otherNode?.id || '');
+          return otherIndex !== -1 && otherIndex <= currentStepIndex;
+        }
+
         const sourceIndex = effectivePresentationOrder.indexOf(edge.source);
         const targetIndex = effectivePresentationOrder.indexOf(edge.target);
         // Both nodes must be visible (current step or earlier)
@@ -105,8 +134,8 @@ function WorkflowCanvas({ isSidebarOpen }: { isSidebarOpen: boolean }) {
     setContextMenu(null);
   }, []);
 
-  const handleAutoLayout = useCallback((direction: LayoutDirection) => {
-    autoLayout(direction);
+  const handleAutoLayout = useCallback(async (direction: LayoutDirection) => {
+    await autoLayout(direction);
     // Fit view after layout with a small delay to let nodes settle
     setTimeout(() => fitView({ duration: 500, padding: 0.2 }), 50);
   }, [autoLayout, fitView]);
@@ -153,6 +182,133 @@ function WorkflowCanvas({ isSidebarOpen }: { isSidebarOpen: boolean }) {
     }
   }, [nodes, fitView]);
 
+  // Align selected nodes vertically (same X position)
+  const handleAlignVertical = useCallback(() => {
+    const selectedNodes = nodes.filter(n => n.selected);
+
+    if (selectedNodes.length < 2) {
+      showToast('Select 2 or more nodes to align (Cmd/Ctrl + click)', 'warning');
+      return;
+    }
+
+    // Use the average X position of selected nodes
+    const avgX = selectedNodes.reduce((sum, n) => sum + n.position.x, 0) / selectedNodes.length;
+
+    // Create position change events for onNodesChange
+    const changes = selectedNodes.map(node => ({
+      type: 'position' as const,
+      id: node.id,
+      position: { x: avgX, y: node.position.y },
+    }));
+
+    onNodesChange(changes);
+
+    // Find edges that connect the selected nodes and make them straight
+    const selectedIds = new Set(selectedNodes.map(n => n.id));
+    const edgesToStraighten = edges
+      .filter(e => selectedIds.has(e.source) && selectedIds.has(e.target))
+      .map(e => e.id);
+
+    if (edgesToStraighten.length > 0) {
+      updateEdgeTypes(edgesToStraighten, 'straight');
+    }
+
+    showToast(`Aligned ${selectedNodes.length} nodes vertically`);
+  }, [nodes, edges, onNodesChange, updateEdgeTypes, showToast]);
+
+  // Align selected nodes horizontally (same Y position)
+  const handleAlignHorizontal = useCallback(() => {
+    const selectedNodes = nodes.filter(n => n.selected);
+
+    if (selectedNodes.length < 2) {
+      showToast('Select 2 or more nodes to align (Cmd/Ctrl + click)', 'warning');
+      return;
+    }
+
+    // Use the average Y position of selected nodes
+    const avgY = selectedNodes.reduce((sum, n) => sum + n.position.y, 0) / selectedNodes.length;
+
+    // Create position change events for onNodesChange
+    const changes = selectedNodes.map(node => ({
+      type: 'position' as const,
+      id: node.id,
+      position: { x: node.position.x, y: avgY },
+    }));
+
+    onNodesChange(changes);
+
+    // Find edges that connect the selected nodes and make them straight
+    const selectedIds = new Set(selectedNodes.map(n => n.id));
+    const edgesToStraighten = edges
+      .filter(e => selectedIds.has(e.source) && selectedIds.has(e.target))
+      .map(e => e.id);
+
+    if (edgesToStraighten.length > 0) {
+      updateEdgeTypes(edgesToStraighten, 'straight');
+    }
+
+    showToast(`Aligned ${selectedNodes.length} nodes horizontally`);
+  }, [nodes, edges, onNodesChange, updateEdgeTypes, showToast]);
+
+  const handleReEvaluate = useCallback(async () => {
+    // Build description from diagram content if none exists
+    let descriptionToEvaluate = activeStory?.description || '';
+
+    if (!descriptionToEvaluate && nodes.length > 0) {
+      // Generate description from node titles and descriptions
+      const nodeDescriptions = nodes.map(n => `${n.data.title}: ${n.data.description || ''}`).join('. ');
+      descriptionToEvaluate = `Workflow with steps: ${nodeDescriptions}`;
+    }
+
+    if (!descriptionToEvaluate) {
+      showToast('Add some nodes to the diagram first', 'warning');
+      return;
+    }
+
+    setIsEvaluating(true);
+    try {
+      const result = await classifyDiagramType(descriptionToEvaluate, 'workflow');
+
+      if (result.recommendedType !== 'workflow') {
+        setClassification(result);
+        setShowSuggestionModal(true);
+      } else {
+        showToast('This workflow diagram type is the best fit for your content');
+      }
+    } catch (err) {
+      showToast('Failed to evaluate diagram type', 'error');
+    } finally {
+      setIsEvaluating(false);
+    }
+  }, [activeStory, nodes, showToast]);
+
+  const handleAcceptSuggestion = async (suggestedType: DiagramType) => {
+    setShowSuggestionModal(false);
+
+    if (!activeProjectId || !activeStory) return;
+
+    const confirmed = await confirm({
+      title: 'Switch Diagram Type',
+      message: `This will create a new ${suggestedType} diagram and delete the current workflow. Continue?`,
+      confirmText: 'Switch',
+      variant: 'danger',
+    });
+
+    if (confirmed) {
+      // Create a new diagram of the suggested type
+      const newId = await createUserStory(activeStory.name, suggestedType, activeStory.description);
+      const oldId = activeStory.id;
+      setActiveStory(newId);
+      await deleteUserStory(oldId);
+      showToast(`Switched to ${suggestedType} diagram`);
+    }
+  };
+
+  const handleKeepOriginal = () => {
+    setShowSuggestionModal(false);
+    showToast('Keeping current workflow diagram');
+  };
+
   return (
     <div className="flex-1 relative" style={{ height: '100%' }}>
       <ReactFlow
@@ -184,6 +340,9 @@ function WorkflowCanvas({ isSidebarOpen }: { isSidebarOpen: boolean }) {
             <MiniMap
               className="bg-white rounded-lg shadow-sm border border-slate-200"
               nodeColor={(node) => {
+                if (node.data?.nodeKind === 'annotation') {
+                  return colors.primaryFaded;
+                }
                 const status = node.data?.status;
                 switch (status) {
                   case 'done':
@@ -219,6 +378,26 @@ function WorkflowCanvas({ isSidebarOpen }: { isSidebarOpen: boolean }) {
                   </svg>
                 </button>
                 <div className="w-px h-4 bg-slate-200 mx-1" />
+                <span className="text-xs text-slate-500 mr-1">Align:</span>
+                <button
+                  onClick={handleAlignVertical}
+                  className="p-1.5 hover:bg-slate-100 rounded text-slate-600 transition-colors"
+                  title="Align selected nodes vertically (Cmd/Ctrl + click to select)"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m-6-4h12M6 8h12" />
+                  </svg>
+                </button>
+                <button
+                  onClick={handleAlignHorizontal}
+                  className="p-1.5 hover:bg-slate-100 rounded text-slate-600 transition-colors"
+                  title="Align selected nodes horizontally (Cmd/Ctrl + click to select)"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 12h16M8 6v12m8-12v12" />
+                  </svg>
+                </button>
+                <div className="w-px h-4 bg-slate-200 mx-1" />
                 <button
                   onClick={handleScreenshot}
                   className="p-1.5 hover:bg-slate-100 rounded text-slate-600 transition-colors"
@@ -233,6 +412,22 @@ function WorkflowCanvas({ isSidebarOpen }: { isSidebarOpen: boolean }) {
                   title="Generate Summary"
                 >
                   <DocumentTextIcon className="w-4 h-4" />
+                </button>
+                <div className="w-px h-4 bg-slate-200 mx-1" />
+                <button
+                  onClick={handleReEvaluate}
+                  disabled={isEvaluating}
+                  className="p-1.5 hover:bg-slate-100 rounded text-yellow-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  title="Re-evaluate diagram type"
+                >
+                  {isEvaluating ? (
+                    <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                    </svg>
+                  ) : (
+                    <LightBulbIcon className="w-4 h-4" />
+                  )}
                 </button>
               </div>
             </Panel>
@@ -308,6 +503,18 @@ function WorkflowCanvas({ isSidebarOpen }: { isSidebarOpen: boolean }) {
           onSummaryGenerated={saveDiagramSummary}
         />
       )}
+
+      {/* Re-evaluate Suggestion Modal */}
+      {classification && (
+        <DiagramSuggestionModal
+          isOpen={showSuggestionModal}
+          onClose={() => setShowSuggestionModal(false)}
+          classification={classification}
+          requestedType="workflow"
+          onAcceptSuggestion={handleAcceptSuggestion}
+          onKeepOriginal={handleKeepOriginal}
+        />
+      )}
     </div>
   );
 }
@@ -340,6 +547,22 @@ function FlowCanvas({ isSidebarOpen }: { isSidebarOpen: boolean }) {
     );
   }
 
+  if (activeStory?.type === 'state-diagram') {
+    return (
+      <div className="flex-1 flex flex-col overflow-hidden" style={{ height: '100%' }}>
+        <StateDiagramCanvas isSidebarOpen={isSidebarOpen} />
+      </div>
+    );
+  }
+
+  if (activeStory?.type === 'erd') {
+    return (
+      <div className="flex-1 flex flex-col overflow-hidden" style={{ height: '100%' }}>
+        <ERDCanvas isSidebarOpen={isSidebarOpen} />
+      </div>
+    );
+  }
+
   return (
     <ReactFlowProvider>
       <WorkflowCanvas isSidebarOpen={isSidebarOpen} />
@@ -350,7 +573,41 @@ function FlowCanvas({ isSidebarOpen }: { isSidebarOpen: boolean }) {
 function AppContent() {
   const { isPresentationMode, isLoading, initializeStore } = useStoryStore();
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [sidebarWidth, setSidebarWidth] = useState(288); // w-72 = 18rem = 288px
+  const [isResizing, setIsResizing] = useState(false);
   const { colors } = useTheme();
+
+  // Handle sidebar resize
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsResizing(true);
+  }, []);
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isResizing) return;
+      const newWidth = Math.min(Math.max(e.clientX, 200), 500); // Min 200px, max 500px
+      setSidebarWidth(newWidth);
+    };
+
+    const handleMouseUp = () => {
+      setIsResizing(false);
+    };
+
+    if (isResizing) {
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+    }
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+  }, [isResizing]);
 
   // Initialize store from Firestore
   useEffect(() => {
@@ -381,11 +638,21 @@ function AppContent() {
         <>
           {/* Sidebar */}
           <div
-            className={`transition-all duration-300 ease-in-out ${
-              isSidebarOpen ? 'w-72' : 'w-0'
-            } overflow-hidden`}
+            className={`relative flex-shrink-0 ${
+              isSidebarOpen ? '' : 'w-0'
+            } overflow-hidden ${!isResizing ? 'transition-all duration-300 ease-in-out' : ''}`}
+            style={{ width: isSidebarOpen ? sidebarWidth : 0 }}
           >
             <UserStorySidebar onClose={() => setIsSidebarOpen(false)} />
+
+            {/* Resize handle */}
+            {isSidebarOpen && (
+              <div
+                onMouseDown={handleMouseDown}
+                className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-slate-300 active:bg-slate-400 transition-colors z-10"
+                title="Drag to resize"
+              />
+            )}
           </div>
 
           {/* Toggle button when sidebar is closed */}

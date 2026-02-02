@@ -13,9 +13,10 @@
     "deploy:firestore": "firebase deploy --only firestore"
   },
   "dependencies": {
-    "@dagrejs/dagre": "^1.1.8",
     "@heroicons/react": "^2.2.0",
     "@xyflow/react": "^12.10.0",
+    "dom-to-image-more": "^3.7.2",
+    "elkjs": "^0.11.0",
     "firebase": "^12.8.0",
     "html-to-image": "^1.11.13",
     "react": "^19.2.0",

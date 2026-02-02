@@ -16,7 +16,7 @@ import { getLayoutedElements, type LayoutDirection } from '../utils/layout';
 import * as firestore from '../lib/firestore';
 
 // Diagram types
-export type DiagramType = 'workflow' | 'ssd';
+export type DiagramType = 'workflow' | 'ssd' | 'state-diagram' | 'erd';
 
 // A Project contains multiple diagrams
 export type Project = {
@@ -35,6 +35,9 @@ export type StoryNode = {
   status: 'todo' | 'in-progress' | 'done';
   priority: 'low' | 'medium' | 'high';
   order: number;
+  nodeKind?: 'story' | 'annotation';
+  codeContent?: string;
+  showCode?: boolean;
 };
 
 // An Actor represents a lane/participant in a System Sequence Diagram
@@ -56,6 +59,55 @@ export type SSDMessage = {
   order: number;
 };
 
+// A State in a State Diagram
+export type DiagramState = {
+  id: string;
+  name: string;
+  description: string;
+  type: 'normal' | 'initial' | 'final';
+  order: number;
+};
+
+// A Transition between states
+export type StateTransition = {
+  id: string;
+  fromStateId: string;
+  toStateId: string;
+  trigger: string; // Event that causes the transition
+  guard?: string; // Condition that must be true
+  action?: string; // Action performed during transition
+  order: number;
+};
+
+// An Entity in an ERD
+export type ERDEntity = {
+  id: string;
+  name: string;
+  attributes: ERDAttribute[];
+  order: number;
+};
+
+// An Attribute of an Entity
+export type ERDAttribute = {
+  id: string;
+  name: string;
+  type: string;
+  isPrimaryKey: boolean;
+  isForeignKey: boolean;
+  isRequired: boolean;
+};
+
+// A Relationship between entities
+export type ERDRelationship = {
+  id: string;
+  fromEntityId: string;
+  toEntityId: string;
+  fromCardinality: '1' | 'N' | '0..1' | '0..N' | '1..N';
+  toCardinality: '1' | 'N' | '0..1' | '0..N' | '1..N';
+  label: string;
+  order: number;
+};
+
 // A User Story/Diagram is a complete experience
 export type UserStory = {
   id: string;
@@ -71,6 +123,12 @@ export type UserStory = {
   // For SSD diagrams
   actors: Actor[];
   messages: SSDMessage[];
+  // For State Diagrams
+  states: DiagramState[];
+  transitions: StateTransition[];
+  // For ERD
+  entities: ERDEntity[];
+  relationships: ERDRelationship[];
   // AI-generated summary
   summary?: string;
 };
@@ -93,6 +151,10 @@ type StoryStore = {
   edges: Edge[];
   actors: Actor[];
   messages: SSDMessage[];
+  states: DiagramState[];
+  transitions: StateTransition[];
+  entities: ERDEntity[];
+  relationships: ERDRelationship[];
 
   // Presentation mode
   isPresentationMode: boolean;
@@ -119,6 +181,7 @@ type StoryStore = {
   // User Story CRUD
   createUserStory: (name: string, type: DiagramType, description?: string) => Promise<string>;
   updateUserStory: (id: string, updates: Partial<Pick<UserStory, 'name' | 'description'>>) => Promise<void>;
+  changeDiagramType: (id: string, newType: DiagramType) => Promise<void>;
   deleteUserStory: (id: string) => Promise<void>;
   setActiveStory: (id: string | null) => void;
   duplicateUserStory: (id: string) => Promise<string>;
@@ -127,12 +190,14 @@ type StoryStore = {
 
   // Node CRUD (for workflow)
   addNode: (node: Omit<StoryNode, 'id' | 'order'>, position?: { x: number; y: number }) => void;
+  addAnnotationNode: (title: string, description: string, position?: { x: number; y: number }) => void;
   importGeneratedWorkflow: (nodes: Array<{ id: string; title: string; description: string; priority: StoryNode['priority']; order: number }>, edges: Array<{ source: string; target: string }>) => void;
   updateNode: (id: string, updates: Partial<Omit<StoryNode, 'id'>>) => void;
   deleteNode: (id: string) => void;
   duplicateNode: (id: string) => void;
   getNode: (id: string) => StoryNode | undefined;
-  autoLayout: (direction?: LayoutDirection) => void;
+  autoLayout: (direction?: LayoutDirection) => Promise<void>;
+  updateEdgeTypes: (edgeIds: string[], edgeType: string) => void;
 
   // Actor CRUD (for SSD)
   addActor: (actor: Omit<Actor, 'id' | 'order'>) => void;
@@ -149,6 +214,36 @@ type StoryStore = {
     generatedActors: Omit<Actor, 'id'>[],
     generatedMessages: Omit<SSDMessage, 'id' | 'order'>[],
     participantIdMap: Map<string, number>
+  ) => void;
+
+  // State CRUD (for State Diagrams)
+  addState: (state: Omit<DiagramState, 'id' | 'order'>) => void;
+  updateState: (id: string, updates: Partial<Omit<DiagramState, 'id'>>) => void;
+  deleteState: (id: string) => void;
+  reorderStates: (stateIds: string[]) => void;
+
+  // Transition CRUD (for State Diagrams)
+  addTransition: (transition: Omit<StateTransition, 'id' | 'order'>) => void;
+  updateTransition: (id: string, updates: Partial<Omit<StateTransition, 'id'>>) => void;
+  deleteTransition: (id: string) => void;
+  importGeneratedStateDiagram: (
+    generatedStates: Omit<DiagramState, 'id'>[],
+    generatedTransitions: Omit<StateTransition, 'id' | 'order'>[]
+  ) => void;
+
+  // Entity CRUD (for ERD)
+  addEntity: (entity: Omit<ERDEntity, 'id' | 'order'>) => void;
+  updateEntity: (id: string, updates: Partial<Omit<ERDEntity, 'id'>>) => void;
+  deleteEntity: (id: string) => void;
+  reorderEntities: (entityIds: string[]) => void;
+
+  // Relationship CRUD (for ERD)
+  addRelationship: (relationship: Omit<ERDRelationship, 'id' | 'order'>) => void;
+  updateRelationship: (id: string, updates: Partial<Omit<ERDRelationship, 'id'>>) => void;
+  deleteRelationship: (id: string) => void;
+  importGeneratedERD: (
+    generatedEntities: Omit<ERDEntity, 'id'>[],
+    generatedRelationships: Omit<ERDRelationship, 'id' | 'order'>[]
   ) => void;
 
   // Presentation controls
@@ -182,6 +277,7 @@ const createDefaultProject = (): Project => {
 const getPresentationOrder = (nodes: Node<StoryNode>[]) => {
   if (!nodes || nodes.length === 0) return [];
   return [...nodes]
+    .filter((n) => n.data?.nodeKind !== 'annotation')
     .sort((a, b) => (a.data?.order ?? 0) - (b.data?.order ?? 0))
     .map((n) => n.id);
 };
@@ -210,6 +306,10 @@ export const useStoryStore = create<StoryStore>()(
     edges: [],
     actors: [],
     messages: [],
+    states: [],
+    transitions: [],
+    entities: [],
+    relationships: [],
     isPresentationMode: false,
     currentStepIndex: 0,
     presentationOrder: [],
@@ -267,11 +367,22 @@ export const useStoryStore = create<StoryStore>()(
     },
 
     onConnect: (connection) => {
+      const { nodes } = get();
+      const sourceNode = nodes.find((n) => n.id === connection.source);
+      const targetNode = nodes.find((n) => n.id === connection.target);
+      const isAnnotationEdge =
+        sourceNode?.data?.nodeKind === 'annotation' ||
+        targetNode?.data?.nodeKind === 'annotation';
+
       const newEdge = {
         ...connection,
         type: 'smoothstep',
         reconnectable: true,
-        style: { strokeWidth: 2 },
+        style: {
+          strokeWidth: 2,
+          ...(isAnnotationEdge ? { strokeDasharray: '6 4' } : {}),
+        },
+        ...(isAnnotationEdge ? { className: 'annotation-edge' } : {}),
         markerEnd: {
           type: MarkerType.ArrowClosed,
         },
@@ -308,6 +419,10 @@ export const useStoryStore = create<StoryStore>()(
         edges: [],
         actors: [],
         messages: [],
+        states: [],
+        transitions: [],
+        entities: [],
+        relationships: [],
       }));
 
       // Sync to Firestore
@@ -344,6 +459,10 @@ export const useStoryStore = create<StoryStore>()(
         edges: [],
         actors: [],
         messages: [],
+        states: [],
+        transitions: [],
+        entities: [],
+        relationships: [],
       }));
 
       await firestore.deleteProject(id);
@@ -357,6 +476,10 @@ export const useStoryStore = create<StoryStore>()(
         edges: [],
         actors: [],
         messages: [],
+        states: [],
+        transitions: [],
+        entities: [],
+        relationships: [],
         isPresentationMode: false,
         currentStepIndex: 0,
         presentationOrder: [],
@@ -394,6 +517,12 @@ export const useStoryStore = create<StoryStore>()(
           { id: getNextId(), name: 'Server', type: 'system', order: 2 },
         ] : [],
         messages: [],
+        states: type === 'state-diagram' ? [
+          { id: getNextId(), name: 'Start', description: 'Initial state', type: 'initial', order: 1 },
+        ] : [],
+        transitions: [],
+        entities: [],
+        relationships: [],
       };
 
       set((state) => ({
@@ -417,6 +546,53 @@ export const useStoryStore = create<StoryStore>()(
       await firestore.updateDiagram(id, updates);
     },
 
+    changeDiagramType: async (id, newType) => {
+      // Update the diagram type and clear type-specific content
+      set((state) => ({
+        userStories: state.userStories.map((story) =>
+          story.id === id
+            ? {
+                ...story,
+                type: newType,
+                updatedAt: Date.now(),
+                // Clear all type-specific content
+                nodes: [],
+                edges: [],
+                actors: newType === 'ssd' ? [
+                  { id: 'actor-1', name: 'Client', type: 'user', order: 1 },
+                  { id: 'actor-2', name: 'Server', type: 'system', order: 2 },
+                ] : [],
+                messages: [],
+                states: newType === 'state-diagram' ? [
+                  { id: 'state-1', name: 'Start', description: 'Initial state', type: 'initial', order: 1 },
+                ] : [],
+                transitions: [],
+                entities: [],
+                relationships: [],
+              }
+            : story
+        ),
+        // Also clear current working state if this is the active story
+        ...(state.activeStoryId === id ? {
+          nodes: [],
+          edges: [],
+          actors: newType === 'ssd' ? [
+            { id: 'actor-1', name: 'Client', type: 'user', order: 1 },
+            { id: 'actor-2', name: 'Server', type: 'system', order: 2 },
+          ] : [],
+          messages: [],
+          states: newType === 'state-diagram' ? [
+            { id: 'state-1', name: 'Start', description: 'Initial state', type: 'initial', order: 1 },
+          ] : [],
+          transitions: [],
+          entities: [],
+          relationships: [],
+        } : {}),
+      }));
+
+      await firestore.updateDiagram(id, { type: newType });
+    },
+
     deleteUserStory: async (id) => {
       const { activeStoryId } = get();
 
@@ -437,18 +613,35 @@ export const useStoryStore = create<StoryStore>()(
     setActiveStory: (id) => {
       const story = get().userStories.find((s) => s.id === id);
       if (story) {
+        const nodes = story.nodes || [];
+        const nodeIds = new Set(nodes.map(n => n.id));
+
+        // Clean up broken edges - remove any edge where source or target node doesn't exist
+        const validEdges = (story.edges || []).filter(edge =>
+          nodeIds.has(edge.source) && nodeIds.has(edge.target)
+        );
+
         set({
           activeStoryId: id,
-          nodes: story.nodes || [],
-          edges: story.edges || [],
+          nodes: nodes,
+          edges: validEdges,
           actors: story.actors || [],
           messages: story.messages || [],
+          states: story.states || [],
+          transitions: story.transitions || [],
+          entities: story.entities || [],
+          relationships: story.relationships || [],
           presentationOrder: (story.type === 'workflow' || story.type === undefined)
-            ? getPresentationOrder(story.nodes || [])
+            ? getPresentationOrder(nodes)
             : getMessagePresentationOrder(story.messages || []),
           currentStepIndex: 0,
           isPresentationMode: false,
         });
+
+        // If we cleaned up any edges, save the cleaned state
+        if (validEdges.length !== (story.edges || []).length) {
+          get()._debouncedSave();
+        }
       } else {
         set({
           activeStoryId: null,
@@ -456,6 +649,10 @@ export const useStoryStore = create<StoryStore>()(
           edges: [],
           actors: [],
           messages: [],
+          states: [],
+          transitions: [],
+          entities: [],
+          relationships: [],
           presentationOrder: [],
         });
       }
@@ -477,6 +674,10 @@ export const useStoryStore = create<StoryStore>()(
         edges: (story.edges || []).map((e) => ({ ...e })),
         actors: (story.actors || []).map((a) => ({ ...a })),
         messages: (story.messages || []).map((m) => ({ ...m })),
+        states: (story.states || []).map((s) => ({ ...s })),
+        transitions: (story.transitions || []).map((t) => ({ ...t })),
+        entities: (story.entities || []).map((e) => ({ ...e, attributes: [...e.attributes] })),
+        relationships: (story.relationships || []).map((r) => ({ ...r })),
       };
 
       set((state) => ({
@@ -520,6 +721,36 @@ export const useStoryStore = create<StoryStore>()(
         type: 'storyNode',
         position,
         data: { ...nodeData, id, order: maxOrder + 1 },
+      };
+      const newNodes = [...nodes, newNode];
+      set({
+        nodes: newNodes,
+        presentationOrder: getPresentationOrder(newNodes),
+      });
+      get()._debouncedSave();
+    },
+
+    addAnnotationNode: (title, description, position = { x: 250, y: 250 }) => {
+      const { nodes, activeStoryId } = get();
+      if (!activeStoryId) return;
+
+      const id = getNextId();
+      const maxOrder = nodes.length > 0 ? Math.max(...nodes.map((n) => n.data.order)) : 0;
+      const newNode: Node<StoryNode> = {
+        id,
+        type: 'annotationNode',
+        position,
+        data: {
+          id,
+          title,
+          description,
+          status: 'todo',
+          priority: 'low',
+          order: maxOrder + 1,
+          nodeKind: 'annotation',
+          codeContent: '',
+          showCode: false,
+        },
       };
       const newNodes = [...nodes, newNode];
       set({
@@ -594,11 +825,11 @@ export const useStoryStore = create<StoryStore>()(
       get()._debouncedSave();
     },
 
-    autoLayout: (direction = 'TB') => {
+    autoLayout: async (direction = 'TB') => {
       const { nodes, edges, activeStoryId } = get();
       if (!activeStoryId || nodes.length === 0) return;
 
-      const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElements(
+      const { nodes: layoutedNodes, edges: layoutedEdges } = await getLayoutedElements(
         nodes,
         edges,
         direction
@@ -608,6 +839,19 @@ export const useStoryStore = create<StoryStore>()(
         nodes: layoutedNodes,
         edges: layoutedEdges,
       });
+      get()._debouncedSave();
+    },
+
+    updateEdgeTypes: (edgeIds, edgeType) => {
+      const { edges } = get();
+      const edgeIdSet = new Set(edgeIds);
+      const updatedEdges = edges.map(edge => {
+        if (edgeIdSet.has(edge.id)) {
+          return { ...edge, type: edgeType };
+        }
+        return edge;
+      });
+      set({ edges: updatedEdges });
       get()._debouncedSave();
     },
 
@@ -654,11 +898,13 @@ export const useStoryStore = create<StoryStore>()(
         };
       });
 
-      // Create edges with mapped IDs
+      // Create edges with mapped IDs - use bottom-source/top-target handles for TB layout
       const newEdges: Edge[] = generatedEdges.map((edge, index) => ({
         id: `e${idMap.get(edge.source)}-${idMap.get(edge.target)}-${index}`,
         source: idMap.get(edge.source)!,
         target: idMap.get(edge.target)!,
+        sourceHandle: 'bottom-source',
+        targetHandle: 'top-target',
         type: 'smoothstep',
         style: { strokeWidth: 2 },
         markerEnd: {
@@ -814,6 +1060,218 @@ export const useStoryStore = create<StoryStore>()(
       get()._debouncedSave();
     },
 
+    // State CRUD (State Diagrams)
+    addState: (stateData) => {
+      const { states, activeStoryId } = get();
+      if (!activeStoryId) return;
+
+      const id = getNextId();
+      const maxOrder = states.length > 0 ? Math.max(...states.map((s) => s.order)) : 0;
+      const newState: DiagramState = { ...stateData, id, order: maxOrder + 1 };
+      set({ states: [...states, newState] });
+      get()._debouncedSave();
+    },
+
+    updateState: (id, updates) => {
+      const newStates = get().states.map((state) =>
+        state.id === id ? { ...state, ...updates } : state
+      );
+      set({ states: newStates });
+      get()._debouncedSave();
+    },
+
+    deleteState: (id) => {
+      const newStates = get().states.filter((s) => s.id !== id);
+      const newTransitions = get().transitions.filter(
+        (t) => t.fromStateId !== id && t.toStateId !== id
+      );
+      set({
+        states: newStates,
+        transitions: newTransitions,
+      });
+      get()._debouncedSave();
+    },
+
+    reorderStates: (stateIds) => {
+      const { states } = get();
+      const newStates = stateIds.map((id, index) => {
+        const state = states.find((s) => s.id === id);
+        return state ? { ...state, order: index + 1 } : null;
+      }).filter(Boolean) as DiagramState[];
+      set({ states: newStates });
+      get()._debouncedSave();
+    },
+
+    // Transition CRUD (State Diagrams)
+    addTransition: (transitionData) => {
+      const { transitions, activeStoryId } = get();
+      if (!activeStoryId) return;
+
+      const id = getNextId();
+      const maxOrder = transitions.length > 0 ? Math.max(...transitions.map((t) => t.order)) : 0;
+      const newTransition: StateTransition = { ...transitionData, id, order: maxOrder + 1 };
+      set({ transitions: [...transitions, newTransition] });
+      get()._debouncedSave();
+    },
+
+    updateTransition: (id, updates) => {
+      const newTransitions = get().transitions.map((transition) =>
+        transition.id === id ? { ...transition, ...updates } : transition
+      );
+      set({ transitions: newTransitions });
+      get()._debouncedSave();
+    },
+
+    deleteTransition: (id) => {
+      const newTransitions = get().transitions.filter((t) => t.id !== id);
+      set({ transitions: newTransitions });
+      get()._debouncedSave();
+    },
+
+    importGeneratedStateDiagram: (generatedStates, generatedTransitions) => {
+      const { activeStoryId } = get();
+      if (!activeStoryId) return;
+
+      const stateIdMap = new Map<string, string>();
+
+      // Create states with proper IDs
+      const newStates: DiagramState[] = generatedStates.map((state, index) => {
+        const newId = getNextId();
+        stateIdMap.set(`s${index + 1}`, newId);
+        return {
+          id: newId,
+          name: state.name,
+          description: state.description,
+          type: state.type,
+          order: state.order,
+        };
+      });
+
+      // Create transitions with mapped state IDs
+      const newTransitions: StateTransition[] = generatedTransitions.map((trans, index) => ({
+        id: getNextId(),
+        fromStateId: stateIdMap.get(trans.fromStateId) || trans.fromStateId,
+        toStateId: stateIdMap.get(trans.toStateId) || trans.toStateId,
+        trigger: trans.trigger,
+        guard: trans.guard,
+        action: trans.action,
+        order: index + 1,
+      }));
+
+      set({
+        states: newStates,
+        transitions: newTransitions,
+      });
+      get()._debouncedSave();
+    },
+
+    // Entity CRUD (ERD)
+    addEntity: (entityData) => {
+      const { entities, activeStoryId } = get();
+      if (!activeStoryId) return;
+
+      const id = getNextId();
+      const maxOrder = entities.length > 0 ? Math.max(...entities.map((e) => e.order)) : 0;
+      const newEntity: ERDEntity = { ...entityData, id, order: maxOrder + 1 };
+      set({ entities: [...entities, newEntity] });
+      get()._debouncedSave();
+    },
+
+    updateEntity: (id, updates) => {
+      const newEntities = get().entities.map((entity) =>
+        entity.id === id ? { ...entity, ...updates } : entity
+      );
+      set({ entities: newEntities });
+      get()._debouncedSave();
+    },
+
+    deleteEntity: (id) => {
+      const newEntities = get().entities.filter((e) => e.id !== id);
+      const newRelationships = get().relationships.filter(
+        (r) => r.fromEntityId !== id && r.toEntityId !== id
+      );
+      set({
+        entities: newEntities,
+        relationships: newRelationships,
+      });
+      get()._debouncedSave();
+    },
+
+    reorderEntities: (entityIds) => {
+      const { entities } = get();
+      const newEntities = entityIds.map((id, index) => {
+        const entity = entities.find((e) => e.id === id);
+        return entity ? { ...entity, order: index + 1 } : null;
+      }).filter(Boolean) as ERDEntity[];
+      set({ entities: newEntities });
+      get()._debouncedSave();
+    },
+
+    // Relationship CRUD (ERD)
+    addRelationship: (relationshipData) => {
+      const { relationships, activeStoryId } = get();
+      if (!activeStoryId) return;
+
+      const id = getNextId();
+      const maxOrder = relationships.length > 0 ? Math.max(...relationships.map((r) => r.order)) : 0;
+      const newRelationship: ERDRelationship = { ...relationshipData, id, order: maxOrder + 1 };
+      set({ relationships: [...relationships, newRelationship] });
+      get()._debouncedSave();
+    },
+
+    updateRelationship: (id, updates) => {
+      const newRelationships = get().relationships.map((rel) =>
+        rel.id === id ? { ...rel, ...updates } : rel
+      );
+      set({ relationships: newRelationships });
+      get()._debouncedSave();
+    },
+
+    deleteRelationship: (id) => {
+      const newRelationships = get().relationships.filter((r) => r.id !== id);
+      set({ relationships: newRelationships });
+      get()._debouncedSave();
+    },
+
+    importGeneratedERD: (generatedEntities, generatedRelationships) => {
+      const { activeStoryId } = get();
+      if (!activeStoryId) return;
+
+      const entityIdMap = new Map<string, string>();
+
+      // Create entities with proper IDs
+      const newEntities: ERDEntity[] = generatedEntities.map((entity, index) => {
+        const newId = getNextId();
+        entityIdMap.set(`e${index + 1}`, newId);
+        return {
+          id: newId,
+          name: entity.name,
+          attributes: entity.attributes.map((attr) => ({
+            ...attr,
+            id: getNextId(),
+          })),
+          order: entity.order,
+        };
+      });
+
+      // Create relationships with mapped entity IDs
+      const newRelationships: ERDRelationship[] = generatedRelationships.map((rel, index) => ({
+        id: getNextId(),
+        fromEntityId: entityIdMap.get(rel.fromEntityId) || rel.fromEntityId,
+        toEntityId: entityIdMap.get(rel.toEntityId) || rel.toEntityId,
+        fromCardinality: rel.fromCardinality,
+        toCardinality: rel.toCardinality,
+        label: rel.label,
+        order: index + 1,
+      }));
+
+      set({
+        entities: newEntities,
+        relationships: newRelationships,
+      });
+      get()._debouncedSave();
+    },
+
     // Presentation
     startPresentation: () => {
       const story = get().getActiveStory();
@@ -869,7 +1327,7 @@ export const useStoryStore = create<StoryStore>()(
     },
 
     _saveActiveStory: () => {
-      const { activeStoryId, nodes, edges, actors, messages, userStories } = get();
+      const { activeStoryId, nodes, edges, actors, messages, states, transitions, entities, relationships, userStories } = get();
       if (!activeStoryId) return;
 
       const updatedStory = userStories.find((s) => s.id === activeStoryId);
@@ -881,6 +1339,10 @@ export const useStoryStore = create<StoryStore>()(
         edges,
         actors,
         messages,
+        states,
+        transitions,
+        entities,
+        relationships,
         updatedAt: Date.now(),
       };
 
@@ -896,6 +1358,10 @@ export const useStoryStore = create<StoryStore>()(
         edges,
         actors,
         messages,
+        states,
+        transitions,
+        entities,
+        relationships,
       }).catch((err) => console.error('Failed to save to Firestore:', err));
     },
 

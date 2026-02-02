@@ -154,26 +154,62 @@ export function UserStorySidebar({ onClose }: UserStorySidebarProps) {
   };
 
   const getTypeIcon = (type: DiagramType | undefined) => {
-    if (type === 'ssd') {
-      return (
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12M8 12h12M8 17h12M4 7h.01M4 12h.01M4 17h.01" />
-        </svg>
-      );
+    switch (type) {
+      case 'ssd':
+        return (
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12M8 12h12M8 17h12M4 7h.01M4 12h.01M4 17h.01" />
+          </svg>
+        );
+      case 'state-diagram':
+        return (
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+        );
+      case 'erd':
+        return (
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" />
+          </svg>
+        );
+      default:
+        return (
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+          </svg>
+        );
     }
-    return (
-      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-      </svg>
-    );
   };
 
   const getTypeIconStyle = (type: DiagramType | undefined) => {
-    return { color: type === 'ssd' ? colors.primaryLight : colors.primary };
+    switch (type) {
+      case 'ssd':
+        return { color: colors.primaryLight };
+      case 'state-diagram':
+        return { color: '#10b981' }; // Green for state diagrams
+      case 'erd':
+        return { color: '#f59e0b' }; // Amber for ERD
+      default:
+        return { color: colors.primary };
+    }
+  };
+
+  const getTypeName = (type: DiagramType | undefined) => {
+    switch (type) {
+      case 'ssd':
+        return 'Sequence Diagram';
+      case 'state-diagram':
+        return 'State Diagram';
+      case 'erd':
+        return 'Entity Relationship Diagram';
+      default:
+        return 'Workflow';
+    }
   };
 
   return (
-    <div className="w-72 h-full bg-slate-800 border-r border-slate-700 flex flex-col">
+    <div className="w-full h-full bg-slate-800 border-r border-slate-700 flex flex-col">
       {/* Header */}
       <div className="p-4 border-b border-slate-700">
         <div className="flex items-center justify-between">
@@ -505,7 +541,7 @@ export function UserStorySidebar({ onClose }: UserStorySidebarProps) {
         {creationStep === 'select-type' && (
           <div className="space-y-3">
             <h3 className="text-white font-medium text-sm">Select Diagram Type</h3>
-            <div className="space-y-2">
+            <div className="space-y-2 max-h-[400px] overflow-y-auto">
               <button
                 onClick={() => handleSelectType('workflow')}
                 className="w-full p-3 bg-slate-700 hover:bg-slate-600 rounded-lg text-left transition-colors border border-slate-600"
@@ -545,6 +581,40 @@ export function UserStorySidebar({ onClose }: UserStorySidebarProps) {
                   </div>
                 </div>
               </button>
+
+              <button
+                onClick={() => handleSelectType('state-diagram')}
+                className="w-full p-3 bg-slate-700 hover:bg-slate-600 rounded-lg text-left transition-colors border border-slate-600"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-emerald-500/20">
+                    <svg className="w-5 h-5 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h4 className="text-white font-medium text-sm">State Diagram</h4>
+                    <p className="text-slate-400 text-xs">States and transitions for object lifecycle</p>
+                  </div>
+                </div>
+              </button>
+
+              <button
+                onClick={() => handleSelectType('erd')}
+                className="w-full p-3 bg-slate-700 hover:bg-slate-600 rounded-lg text-left transition-colors border border-slate-600"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-amber-500/20">
+                    <svg className="w-5 h-5 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h4 className="text-white font-medium text-sm">Entity Relationship Diagram</h4>
+                    <p className="text-slate-400 text-xs">Database entities and relationships</p>
+                  </div>
+                </div>
+              </button>
             </div>
 
             <button
@@ -563,7 +633,7 @@ export function UserStorySidebar({ onClose }: UserStorySidebarProps) {
                 {getTypeIcon(selectedType)}
               </span>
               <h3 className="text-white font-medium text-sm">
-                New {selectedType === 'ssd' ? 'Sequence Diagram' : 'Workflow'}
+                New {getTypeName(selectedType)}
               </h3>
             </div>
 

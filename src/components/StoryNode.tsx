@@ -66,21 +66,42 @@ export function StoryNode({ data, id, selected }: NodeProps<Node<StoryNodeType>>
         <Handle
           type="target"
           position={Position.Top}
-          id="top"
+          id="top-target"
+          isConnectable={true}
+          className="!bg-[var(--color-primary)] !w-2 !h-2 !border !border-white"
+        />
+        <Handle
+          type="source"
+          position={Position.Top}
+          id="top-source"
           isConnectable={true}
           className="!bg-[var(--color-primary)] !w-2 !h-2 !border !border-white"
         />
         <Handle
           type="target"
           position={Position.Left}
-          id="left"
+          id="left-target"
+          isConnectable={true}
+          className="!bg-[var(--color-primary)] !w-2 !h-2 !border !border-white"
+        />
+        <Handle
+          type="source"
+          position={Position.Left}
+          id="left-source"
+          isConnectable={true}
+          className="!bg-[var(--color-primary)] !w-2 !h-2 !border !border-white"
+        />
+        <Handle
+          type="target"
+          position={Position.Right}
+          id="right-target"
           isConnectable={true}
           className="!bg-[var(--color-primary)] !w-2 !h-2 !border !border-white"
         />
         <Handle
           type="source"
           position={Position.Right}
-          id="right"
+          id="right-source"
           isConnectable={true}
           className="!bg-[var(--color-primary)] !w-2 !h-2 !border !border-white"
         />
@@ -149,9 +170,16 @@ export function StoryNode({ data, id, selected }: NodeProps<Node<StoryNodeType>>
         </div>
 
         <Handle
+          type="target"
+          position={Position.Bottom}
+          id="bottom-target"
+          isConnectable={true}
+          className="!bg-[var(--color-primary)] !w-2 !h-2 !border !border-white"
+        />
+        <Handle
           type="source"
           position={Position.Bottom}
-          id="bottom"
+          id="bottom-source"
           isConnectable={true}
           className="!bg-[var(--color-primary)] !w-2 !h-2 !border !border-white"
         />
@@ -207,29 +235,50 @@ export function StoryNode({ data, id, selected }: NodeProps<Node<StoryNodeType>>
             : 'w-64'
         } ${isDimmed ? 'opacity-40' : ''} ${selected && !isPresentationMode ? 'w-72' : ''}`}
       >
-        {/* Top handle */}
+        {/* Top handles - both source and target */}
         <Handle
           type="target"
           position={Position.Top}
-          id="top"
+          id="top-target"
+          isConnectable={true}
+          className="!bg-[var(--color-primary)] !w-2 !h-2 !border !border-white hover:!w-3 hover:!h-3 transition-all"
+        />
+        <Handle
+          type="source"
+          position={Position.Top}
+          id="top-source"
           isConnectable={true}
           className="!bg-[var(--color-primary)] !w-2 !h-2 !border !border-white hover:!w-3 hover:!h-3 transition-all"
         />
 
-        {/* Left handle */}
+        {/* Left handles - both source and target */}
         <Handle
           type="target"
           position={Position.Left}
-          id="left"
+          id="left-target"
+          isConnectable={true}
+          className="!bg-[var(--color-primary)] !w-2 !h-2 !border !border-white hover:!w-3 hover:!h-3 transition-all"
+        />
+        <Handle
+          type="source"
+          position={Position.Left}
+          id="left-source"
           isConnectable={true}
           className="!bg-[var(--color-primary)] !w-2 !h-2 !border !border-white hover:!w-3 hover:!h-3 transition-all"
         />
 
-        {/* Right handle */}
+        {/* Right handles - both source and target */}
+        <Handle
+          type="target"
+          position={Position.Right}
+          id="right-target"
+          isConnectable={true}
+          className="!bg-[var(--color-primary)] !w-2 !h-2 !border !border-white hover:!w-3 hover:!h-3 transition-all"
+        />
         <Handle
           type="source"
           position={Position.Right}
-          id="right"
+          id="right-source"
           isConnectable={true}
           className="!bg-[var(--color-primary)] !w-2 !h-2 !border !border-white hover:!w-3 hover:!h-3 transition-all"
         />
@@ -244,11 +293,18 @@ export function StoryNode({ data, id, selected }: NodeProps<Node<StoryNodeType>>
           </span>
         </div>
 
-        {/* Bottom handle */}
+        {/* Bottom handles - both source and target */}
+        <Handle
+          type="target"
+          position={Position.Bottom}
+          id="bottom-target"
+          isConnectable={true}
+          className="!bg-[var(--color-primary)] !w-2 !h-2 !border !border-white hover:!w-3 hover:!h-3 transition-all"
+        />
         <Handle
           type="source"
           position={Position.Bottom}
-          id="bottom"
+          id="bottom-source"
           isConnectable={true}
           className="!bg-[var(--color-primary)] !w-2 !h-2 !border !border-white hover:!w-3 hover:!h-3 transition-all"
         />

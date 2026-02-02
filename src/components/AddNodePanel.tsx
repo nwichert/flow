@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Panel } from '@xyflow/react';
-import { SparklesIcon, PlusIcon } from '@heroicons/react/24/solid';
+import { SparklesIcon, PlusIcon, DocumentTextIcon } from '@heroicons/react/24/solid';
 import { useStoryStore, type StoryNode } from '../store/useStoryStore';
 import { AIWorkflowGenerator } from './AIWorkflowGenerator';
 import { useToast } from './Toast';
@@ -11,6 +11,7 @@ type AddNodePanelProps = {
 
 export function AddNodePanel({ isSidebarOpen }: AddNodePanelProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const [isAnnotationOpen, setIsAnnotationOpen] = useState(false);
   const [isAIOpen, setIsAIOpen] = useState(false);
   const [formData, setFormData] = useState<Omit<StoryNode, 'id' | 'order'>>({
     title: '',
@@ -18,7 +19,8 @@ export function AddNodePanel({ isSidebarOpen }: AddNodePanelProps) {
     status: 'todo',
     priority: 'medium',
   });
-  const { addNode, activeStoryId } = useStoryStore();
+  const [annotationData, setAnnotationData] = useState({ title: '', description: '' });
+  const { addNode, addAnnotationNode, activeStoryId } = useStoryStore();
   const { showToast } = useToast();
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -40,12 +42,26 @@ export function AddNodePanel({ isSidebarOpen }: AddNodePanelProps) {
     setIsOpen(false);
   };
 
+  const handleAnnotationSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!annotationData.title.trim() || !activeStoryId) return;
+
+    addAnnotationNode(annotationData.title, annotationData.description, {
+      x: Math.random() * 400 + 100,
+      y: Math.random() * 300 + 100,
+    });
+
+    showToast(`Created annotation "${annotationData.title}"`);
+    setAnnotationData({ title: '', description: '' });
+    setIsAnnotationOpen(false);
+  };
+
   if (!activeStoryId) return null;
 
   return (
     <>
       <Panel position="top-left" style={{ margin: 16, marginLeft: isSidebarOpen ? 16 : 64 }}>
-        {!isOpen ? (
+        {!isOpen && !isAnnotationOpen ? (
           <div className="flex items-center gap-2">
             <button
               onClick={() => setIsOpen(true)}
@@ -53,6 +69,14 @@ export function AddNodePanel({ isSidebarOpen }: AddNodePanelProps) {
             >
               <PlusIcon className="w-5 h-5" />
               Add Node
+            </button>
+            <button
+              onClick={() => setIsAnnotationOpen(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-white border-2 border-dashed border-[var(--color-primary-muted)] hover:bg-[var(--color-primary-faded)] rounded-lg text-[var(--color-primary-muted)] font-medium shadow-lg transition-colors"
+              title="Add an annotation note"
+            >
+              <DocumentTextIcon className="w-5 h-5" />
+              Add Annotation
             </button>
             <button
               onClick={() => setIsAIOpen(true)}
@@ -63,6 +87,54 @@ export function AddNodePanel({ isSidebarOpen }: AddNodePanelProps) {
               AI Generate
             </button>
           </div>
+        ) : isAnnotationOpen ? (
+          <form
+            onSubmit={handleAnnotationSubmit}
+            className="w-80 p-4 bg-white rounded-lg shadow-xl border-2 border-dashed border-[var(--color-primary-muted)]"
+          >
+            <h3 className="text-slate-800 font-semibold mb-4">New Annotation</h3>
+
+            <div className="space-y-3">
+              <div>
+                <label className="block text-slate-500 text-xs mb-1">Title</label>
+                <input
+                  type="text"
+                  value={annotationData.title}
+                  onChange={(e) => setAnnotationData({ ...annotationData, title: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-50 rounded text-slate-800 text-sm border border-slate-300 focus:border-[var(--color-primary-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-muted)]/20"
+                  placeholder="Annotation title..."
+                  autoFocus
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-500 text-xs mb-1">Description</label>
+                <textarea
+                  value={annotationData.description}
+                  onChange={(e) => setAnnotationData({ ...annotationData, description: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-50 rounded text-slate-800 text-sm border border-slate-300 focus:border-[var(--color-primary-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-muted)]/20 resize-none"
+                  rows={3}
+                  placeholder="Note, explainer, or context..."
+                />
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="submit"
+                  className="flex-1 px-4 py-2 bg-[var(--color-primary-muted)] hover:bg-[var(--color-primary-light)] rounded text-white text-sm font-medium transition-colors"
+                >
+                  Create Annotation
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsAnnotationOpen(false)}
+                  className="flex-1 px-4 py-2 bg-slate-100 hover:bg-slate-200 rounded text-slate-700 text-sm font-medium transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </form>
         ) : (
           <form
             onSubmit={handleSubmit}

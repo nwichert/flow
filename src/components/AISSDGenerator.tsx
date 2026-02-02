@@ -1,10 +1,13 @@
 import { useState, useEffect } from 'react';
 import { SparklesIcon, XMarkIcon, MicrophoneIcon, StopIcon } from '@heroicons/react/24/solid';
 import { generateSSDFromText } from '../utils/generateSSD';
-import { useStoryStore } from '../store/useStoryStore';
+import { generateWorkflowFromText } from '../utils/generateWorkflow';
+import { useStoryStore, type DiagramType } from '../store/useStoryStore';
 import { useToast } from './Toast';
 import { useVoiceRecording } from '../hooks/useVoiceRecording';
 import { transcribeAudio } from '../utils/transcribeAudio';
+import { classifyDiagramType, type DiagramClassification } from '../utils/classifyDiagram';
+import { DiagramSuggestionModal } from './DiagramSuggestionModal';
 
 type AISSDGeneratorProps = {
   isOpen: boolean;
@@ -23,8 +26,11 @@ export function AISSDGenerator({ isOpen, onClose }: AISSDGeneratorProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { importGeneratedSSD, activeStoryId } = useStoryStore();
+  const [classification, setClassification] = useState<DiagramClassification | null>(null);
+  const [showSuggestionModal, setShowSuggestionModal] = useState(false);
+  const { importGeneratedSSD, importGeneratedWorkflow, autoLayout, activeStoryId, updateUserStory, changeDiagramType, getActiveStory } = useStoryStore();
   const { showToast } = useToast();
+  const [isSuggestionLoading, setIsSuggestionLoading] = useState(false);
 
   const {
     isRecording,
@@ -88,10 +94,38 @@ export function AISSDGenerator({ isOpen, onClose }: AISSDGeneratorProps) {
     setError(null);
 
     try {
+      // First, classify the diagram type
+      const classificationResult = await classifyDiagramType(description, 'ssd');
+
+      // If the recommended type is different from SSD and confidence is not low, show suggestion
+      if (classificationResult.recommendedType !== 'ssd' && classificationResult.confidence !== 'low') {
+        setClassification(classificationResult);
+        setIsLoading(false);
+        onClose(); // Close the generator modal first
+        setShowSuggestionModal(true);
+        return;
+      }
+
+      // Proceed with SSD generation
+      await proceedWithSSDGeneration();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to generate SSD');
+      setIsLoading(false);
+    }
+  };
+
+  const proceedWithSSDGeneration = async () => {
+    setIsLoading(true);
+    try {
       const result = await generateSSDFromText(description);
 
       // Import the generated actors and messages
       importGeneratedSSD(result.actors, result.messages, result.participantIdMap);
+
+      // Save the prompt description to the story for future re-evaluation
+      if (activeStoryId) {
+        await updateUserStory(activeStoryId, { description });
+      }
 
       showToast(`Generated "${result.title}" with ${result.actors.length} participants`);
       setDescription('');
@@ -103,7 +137,73 @@ export function AISSDGenerator({ isOpen, onClose }: AISSDGeneratorProps) {
     }
   };
 
-  if (!isOpen) return null;
+  const handleAcceptSuggestion = async (suggestedType: DiagramType) => {
+    const activeStory = getActiveStory();
+    if (!activeStoryId || !activeStory) return;
+
+    setIsSuggestionLoading(true);
+
+    try {
+      // Change the existing diagram's type (keeps the same name)
+      await changeDiagramType(activeStoryId, suggestedType);
+
+      // Generate content for the new diagram type
+      if (suggestedType === 'workflow') {
+        const workflow = await generateWorkflowFromText(description);
+        importGeneratedWorkflow(workflow.nodes, workflow.edges);
+        // Auto-layout for a clean arrangement
+        await new Promise(resolve => setTimeout(resolve, 100));
+        await autoLayout('TB');
+        showToast(`Converted to workflow with ${workflow.nodes.length} steps`);
+      }
+      // For state-diagram and erd, we don't have generators yet, so just show a message
+      else if (suggestedType === 'state-diagram' || suggestedType === 'erd') {
+        showToast(`Converted to ${suggestedType}. Use AI Generate to add content.`);
+      }
+
+      setDescription('');
+      setShowSuggestionModal(false);
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : `Failed to generate ${suggestedType}`, 'error');
+    } finally {
+      setIsSuggestionLoading(false);
+    }
+  };
+
+  const handleKeepOriginal = () => {
+    setShowSuggestionModal(false);
+    proceedWithSSDGeneration();
+  };
+
+  // Render suggestion modal even when generator is closed
+  if (!isOpen) {
+    return classification && showSuggestionModal ? (
+      <DiagramSuggestionModal
+        isOpen={showSuggestionModal}
+        onClose={() => !isSuggestionLoading && setShowSuggestionModal(false)}
+        classification={classification}
+        requestedType="ssd"
+        onAcceptSuggestion={handleAcceptSuggestion}
+        onKeepOriginal={handleKeepOriginal}
+        isLoading={isSuggestionLoading}
+      />
+    ) : null;
+  }
+
+  // If showing suggestion modal, only render that (not the generator)
+  if (showSuggestionModal && classification) {
+    return (
+      <DiagramSuggestionModal
+        isOpen={showSuggestionModal}
+        onClose={() => !isSuggestionLoading && setShowSuggestionModal(false)}
+        classification={classification}
+        requestedType="ssd"
+        onAcceptSuggestion={handleAcceptSuggestion}
+        onKeepOriginal={handleKeepOriginal}
+        isLoading={isSuggestionLoading}
+      />
+    );
+  }
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">

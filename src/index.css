@@ -55,3 +55,20 @@ body {
 .animate-scale-in {
   animation: scale-in 0.2s ease-out;
 }
+
+/* Ensure React Flow edges are visible */
+.react-flow__edge path {
+  stroke: #ff0071 !important;
+  stroke-width: 2px !important;
+}
+
+.react-flow__edge-path {
+  stroke: #ff0071 !important;
+  stroke-width: 2px !important;
+}
+
+/* Annotation edges - dotted lines with muted theme color */
+.react-flow__edge.annotation-edge path {
+  stroke-dasharray: 6 4 !important;
+  stroke: var(--color-primary-muted) !important;
+}

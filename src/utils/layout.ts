@@ -1,51 +1,99 @@
-import Dagre from '@dagrejs/dagre';
+import ELK from 'elkjs/lib/elk.bundled.js';
 import { type Node, type Edge } from '@xyflow/react';
 
 export type LayoutDirection = 'TB' | 'LR' | 'BT' | 'RL';
 
-const NODE_WIDTH = 256; // w-64 = 16rem = 256px
+const elk = new ELK();
+
+const NODE_WIDTH = 272; // w-72 in presentation = 18rem = 288px, using slightly less
 const NODE_HEIGHT = 120;
 
-export function getLayoutedElements<T extends Record<string, unknown> = Record<string, unknown>>(
+// Map our direction to ELK direction
+const directionMap: Record<LayoutDirection, string> = {
+  TB: 'DOWN',
+  BT: 'UP',
+  LR: 'RIGHT',
+  RL: 'LEFT',
+};
+
+export async function getLayoutedElements<T extends Record<string, unknown> = Record<string, unknown>>(
   nodes: Node<T>[],
   edges: Edge[],
   direction: LayoutDirection = 'TB'
-): { nodes: Node<T>[]; edges: Edge[] } {
-  const g = new Dagre.graphlib.Graph().setDefaultEdgeLabel(() => ({}));
+): Promise<{ nodes: Node<T>[]; edges: Edge[] }> {
+  // If no nodes, return empty
+  if (nodes.length === 0) {
+    return { nodes: [], edges: [] };
+  }
 
-  g.setGraph({
-    rankdir: direction,
-    nodesep: 50,
-    ranksep: 80,
-    marginx: 50,
-    marginy: 50,
-  });
+  // Build ELK graph structure
+  const elkGraph = {
+    id: 'root',
+    layoutOptions: {
+      'elk.algorithm': 'layered',
+      'elk.direction': directionMap[direction],
+      // Spacing options
+      'elk.spacing.nodeNode': '80',
+      'elk.layered.spacing.nodeNodeBetweenLayers': '100',
+      'elk.spacing.edgeNode': '40',
+      'elk.spacing.edgeEdge': '20',
+      // Edge routing - orthogonal with splines for cleaner look
+      'elk.edgeRouting': 'ORTHOGONAL',
+      // Crossing minimization
+      'elk.layered.crossingMinimization.strategy': 'LAYER_SWEEP',
+      // Node placement
+      'elk.layered.nodePlacement.strategy': 'NETWORK_SIMPLEX',
+      // Separate connected components
+      'elk.separateConnectedComponents': 'true',
+      // Port constraints for cleaner edge connections
+      'elk.layered.considerModelOrder.strategy': 'NODES_AND_EDGES',
+    },
+    children: nodes.map((node) => ({
+      id: node.id,
+      width: NODE_WIDTH,
+      height: NODE_HEIGHT,
+    })),
+    edges: edges.map((edge, index) => ({
+      id: edge.id || `e${index}`,
+      sources: [edge.source],
+      targets: [edge.target],
+    })),
+  };
 
-  nodes.forEach((node) => {
-    g.setNode(node.id, { width: NODE_WIDTH, height: NODE_HEIGHT });
-  });
+  try {
+    const layoutedGraph = await elk.layout(elkGraph);
 
-  edges.forEach((edge) => {
-    g.setEdge(edge.source, edge.target);
-  });
+    // Map ELK positions back to React Flow nodes
+    const layoutedNodes = nodes.map((node) => {
+      const elkNode = layoutedGraph.children?.find((n) => n.id === node.id);
 
-  Dagre.layout(g);
+      if (elkNode && elkNode.x !== undefined && elkNode.y !== undefined) {
+        return {
+          ...node,
+          position: {
+            x: elkNode.x,
+            y: elkNode.y,
+          },
+        };
+      }
+      return node;
+    });
 
-  const layoutedNodes = nodes.map((node) => {
-    const nodeWithPosition = g.node(node.id);
+    // Don't change edge handles - preserve user's manual connections
+    // Just return the edges as-is, only node positions change
+    return { nodes: layoutedNodes as Node<T>[], edges };
+  } catch (error) {
+    console.error('ELK layout failed:', error);
+    // Return original nodes/edges if layout fails
+    return { nodes, edges };
+  }
+}
 
-    // Dagre uses center coordinates, React Flow uses top-left
-    return {
-      ...node,
-      position: {
-        x: nodeWithPosition.x - NODE_WIDTH / 2,
-        y: nodeWithPosition.y - NODE_HEIGHT / 2,
-      },
-      // Update handle positions based on layout direction
-      sourcePosition: direction === 'LR' || direction === 'RL' ? 'right' : 'bottom',
-      targetPosition: direction === 'LR' || direction === 'RL' ? 'left' : 'top',
-    };
-  });
-
-  return { nodes: layoutedNodes as Node<T>[], edges };
+// Synchronous version that returns a promise - for backwards compatibility
+export function getLayoutedElementsSync<T extends Record<string, unknown> = Record<string, unknown>>(
+  nodes: Node<T>[],
+  edges: Edge[],
+  direction: LayoutDirection = 'TB'
+): Promise<{ nodes: Node<T>[]; edges: Edge[] }> {
+  return getLayoutedElements(nodes, edges, direction);
 }

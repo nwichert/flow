@@ -106,7 +106,7 @@ Respond with valid JSON only. No markdown, no explanation.`;
         { role: 'user', content: description },
       ],
       temperature: 0.7,
-      max_tokens: 1000,
+      max_tokens: 2000,
     }),
   });
 
@@ -126,12 +126,17 @@ Respond with valid JSON only. No markdown, no explanation.`;
     // Parse the JSON response
     const parsed = JSON.parse(content);
     return parsed as GeneratedWorkflow;
-  } catch {
+  } catch (parseError) {
     // Try to extract JSON from the response if it has extra text
     const jsonMatch = content.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
-      return JSON.parse(jsonMatch[0]) as GeneratedWorkflow;
+      try {
+        return JSON.parse(jsonMatch[0]) as GeneratedWorkflow;
+      } catch {
+        // Fall through to error
+      }
     }
-    throw new Error('Failed to parse AI response');
+    console.error('Failed to parse AI response:', content);
+    throw new Error('AI generated an invalid response. Please try again with a simpler description.');
   }
 }
