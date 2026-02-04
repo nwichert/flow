@@ -291,6 +291,27 @@ const getMessagePresentationOrder = (messages: SSDMessage[]) => {
 let idCounter = 100;
 const getNextId = () => `${idCounter++}`;
 
+/** Bump idCounter past any existing numeric IDs in a story to prevent collisions. */
+const syncIdCounter = (story: { nodes?: { id: string }[]; edges?: { id: string }[]; actors?: { id: string }[]; messages?: { id: string }[]; states?: { id: string }[]; transitions?: { id: string }[]; entities?: { id: string }[]; relationships?: { id: string }[] }) => {
+  const allIds = [
+    ...(story.nodes || []),
+    ...(story.edges || []),
+    ...(story.actors || []),
+    ...(story.messages || []),
+    ...(story.states || []),
+    ...(story.transitions || []),
+    ...(story.entities || []),
+    ...(story.relationships || []),
+  ].map((item) => parseInt(item.id, 10)).filter((n) => !isNaN(n));
+
+  if (allIds.length > 0) {
+    const maxId = Math.max(...allIds);
+    if (maxId >= idCounter) {
+      idCounter = maxId + 1;
+    }
+  }
+};
+
 // Debounce helper
 let saveTimeout: ReturnType<typeof setTimeout> | null = null;
 
@@ -331,6 +352,11 @@ export const useStoryStore = create<StoryStore>()(
           const defaultProject = createDefaultProject();
           await firestore.createProject(defaultProject);
           projects.push(defaultProject);
+        }
+
+        // Sync idCounter past all existing IDs to prevent collisions
+        for (const d of diagrams) {
+          syncIdCounter(d);
         }
 
         set({
@@ -613,6 +639,7 @@ export const useStoryStore = create<StoryStore>()(
     setActiveStory: (id) => {
       const story = get().userStories.find((s) => s.id === id);
       if (story) {
+        syncIdCounter(story);
         const nodes = story.nodes || [];
         const nodeIds = new Set(nodes.map(n => n.id));
 
