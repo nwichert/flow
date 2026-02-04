@@ -279,7 +279,7 @@ export function AnnotationNode({ data, id, selected }: NodeProps<Node<StoryNode>
 
         {data.description && (
           <div className={`text-slate-600 text-xs mb-2 ${
-            selected ? '' : isPresentationMode ? 'line-clamp-5' : 'line-clamp-3'
+            selected || isPresentationMode ? '' : 'line-clamp-3'
           }`}>
             <FormattedText text={data.description} />
           </div>
