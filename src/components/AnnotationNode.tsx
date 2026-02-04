@@ -1,15 +1,79 @@
-import { useState } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import { Handle, Position, NodeToolbar, type NodeProps, type Node } from '@xyflow/react';
 import { useStoryStore, type StoryNode } from '../store/useStoryStore';
 import { useToast } from './Toast';
 import { useConfirm } from './ConfirmDialog';
 
+/** Render description text with **bold** and *italic* markdown syntax. */
+function FormattedText({ text, className }: { text: string; className?: string }) {
+  // Split on **bold** and *italic* markers, preserving delimiters
+  const parts: React.ReactNode[] = [];
+  // Process bold first, then italic within each segment
+  const boldRegex = /\*\*(.+?)\*\*/g;
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+
+  const processItalic = (segment: string, key: string) => {
+    const italicRegex = /\*(.+?)\*/g;
+    const result: React.ReactNode[] = [];
+    let iLastIndex = 0;
+    let iMatch: RegExpExecArray | null;
+
+    while ((iMatch = italicRegex.exec(segment)) !== null) {
+      if (iMatch.index > iLastIndex) {
+        result.push(segment.slice(iLastIndex, iMatch.index));
+      }
+      result.push(<em key={`${key}-i-${iMatch.index}`}>{iMatch[1]}</em>);
+      iLastIndex = iMatch.index + iMatch[0].length;
+    }
+    if (iLastIndex < segment.length) {
+      result.push(segment.slice(iLastIndex));
+    }
+    return result;
+  };
+
+  while ((match = boldRegex.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push(...processItalic(text.slice(lastIndex, match.index), `t-${lastIndex}`));
+    }
+    parts.push(<strong key={`b-${match.index}`}>{match[1]}</strong>);
+    lastIndex = match.index + match[0].length;
+  }
+  if (lastIndex < text.length) {
+    parts.push(...processItalic(text.slice(lastIndex), `t-${lastIndex}`));
+  }
+
+  return <span className={className}>{parts}</span>;
+}
+
 export function AnnotationNode({ data, id, selected }: NodeProps<Node<StoryNode>>) {
   const [isEditing, setIsEditing] = useState(false);
   const [editData, setEditData] = useState(data);
+  const descriptionRef = useRef<HTMLTextAreaElement>(null);
   const { updateNode, deleteNode, duplicateNode, isPresentationMode } = useStoryStore();
   const { showToast } = useToast();
   const { confirm } = useConfirm();
+
+  const wrapSelection = useCallback((wrapper: string) => {
+    const textarea = descriptionRef.current;
+    if (!textarea) return;
+
+    const { selectionStart, selectionEnd, value } = textarea;
+    const selected = value.slice(selectionStart, selectionEnd);
+    if (!selected) return;
+
+    const before = value.slice(0, selectionStart);
+    const after = value.slice(selectionEnd);
+    const newValue = `${before}${wrapper}${selected}${wrapper}${after}`;
+    setEditData((prev) => ({ ...prev, description: newValue }));
+
+    // Restore cursor position after the wrapped text
+    requestAnimationFrame(() => {
+      textarea.focus();
+      const newCursorPos = selectionEnd + wrapper.length * 2;
+      textarea.setSelectionRange(newCursorPos, newCursorPos);
+    });
+  }, []);
 
   const handleSave = () => {
     updateNode(id, {
@@ -85,12 +149,32 @@ export function AnnotationNode({ data, id, selected }: NodeProps<Node<StoryNode>
 
           <div>
             <label className="block text-slate-500 text-xs mb-1">Description</label>
+            <div className="flex items-center gap-1 mb-1">
+              <button
+                type="button"
+                onClick={() => wrapSelection('**')}
+                className="px-1.5 py-0.5 bg-white/60 hover:bg-white/90 rounded text-slate-600 text-xs font-bold border border-slate-200 transition-colors"
+                title="Bold (select text first)"
+              >
+                B
+              </button>
+              <button
+                type="button"
+                onClick={() => wrapSelection('*')}
+                className="px-1.5 py-0.5 bg-white/60 hover:bg-white/90 rounded text-slate-600 text-xs italic border border-slate-200 transition-colors"
+                title="Italic (select text first)"
+              >
+                I
+              </button>
+              <span className="text-slate-400 text-[10px] ml-1">Select text, then click</span>
+            </div>
             <textarea
+              ref={descriptionRef}
               value={editData.description}
               onChange={(e) => setEditData({ ...editData, description: e.target.value })}
               className="w-full px-2 py-1 bg-white/80 rounded text-slate-700 text-xs border border-slate-300 focus:border-[var(--color-primary-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-muted)]/30 resize-none"
               rows={3}
-              placeholder="Annotation text..."
+              placeholder="Annotation text... use **bold** or *italic*"
             />
           </div>
 
@@ -200,9 +284,9 @@ export function AnnotationNode({ data, id, selected }: NodeProps<Node<StoryNode>
         </div>
 
         {data.description && (
-          <p className={`text-slate-400 text-xs mb-2 ${(selected || isPresentationMode) ? '' : 'line-clamp-3'}`}>
-            {data.description}
-          </p>
+          <div className={`text-slate-400 text-xs mb-2 ${(selected || isPresentationMode) ? '' : 'line-clamp-3'}`}>
+            <FormattedText text={data.description} />
+          </div>
         )}
 
         {data.showCode && data.codeContent && (
