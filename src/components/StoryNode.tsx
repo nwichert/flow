@@ -13,9 +13,16 @@ const priorityBadges = {
 export function StoryNode({ data, id, selected }: NodeProps<Node<StoryNodeType>>) {
   const [isEditing, setIsEditing] = useState(false);
   const [editData, setEditData] = useState(data);
+  const [orderInput, setOrderInput] = useState(String(data.order));
   const { updateNode, deleteNode, isPresentationMode, currentStepIndex, presentationOrder } = useStoryStore();
   const { showToast } = useToast();
   const { confirm } = useConfirm();
+
+  const startEditing = () => {
+    setEditData(data);
+    setOrderInput(String(data.order));
+    setIsEditing(true);
+  };
 
   const currentNodeId = presentationOrder[currentStepIndex];
   const nodeIndex = presentationOrder.indexOf(id);
@@ -31,7 +38,7 @@ export function StoryNode({ data, id, selected }: NodeProps<Node<StoryNodeType>>
       description: editData.description,
       status: editData.status,
       priority: editData.priority,
-      order: editData.order,
+      order: parseInt(orderInput, 10) || 1,
     });
     setIsEditing(false);
     showToast('Node updated');
@@ -39,6 +46,7 @@ export function StoryNode({ data, id, selected }: NodeProps<Node<StoryNodeType>>
 
   const handleCancel = () => {
     setEditData(data);
+    setOrderInput(String(data.order));
     setIsEditing(false);
   };
 
@@ -121,11 +129,11 @@ export function StoryNode({ data, id, selected }: NodeProps<Node<StoryNodeType>>
           <div>
             <label className="block text-slate-500 text-xs mb-1">Presentation Order</label>
             <input
-              type="number"
-              value={editData.order}
-              onChange={(e) => setEditData({ ...editData, order: parseInt(e.target.value) || 1 })}
+              type="text"
+              inputMode="numeric"
+              value={orderInput}
+              onChange={(e) => setOrderInput(e.target.value.replace(/[^0-9]/g, ''))}
               className="w-20 px-2 py-1 bg-slate-50 rounded text-slate-800 text-sm text-center border border-slate-300 focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-200"
-              min={1}
             />
           </div>
 
@@ -197,7 +205,7 @@ export function StoryNode({ data, id, selected }: NodeProps<Node<StoryNodeType>>
           className="flex items-center gap-1 px-2 py-1 bg-white rounded-lg shadow-lg border border-slate-200"
         >
           <button
-            onClick={() => setIsEditing(true)}
+            onClick={startEditing}
             className="p-1.5 hover:bg-slate-100 rounded transition-colors"
             title="Edit"
           >

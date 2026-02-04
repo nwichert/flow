@@ -54,6 +54,11 @@ export function AnnotationNode({ data, id, selected }: NodeProps<Node<StoryNode>
   const { showToast } = useToast();
   const { confirm } = useConfirm();
 
+  const startEditing = () => {
+    setEditData(data);
+    setIsEditing(true);
+  };
+
   const wrapSelection = useCallback((wrapper: string) => {
     const textarea = descriptionRef.current;
     if (!textarea) return;
@@ -226,7 +231,7 @@ export function AnnotationNode({ data, id, selected }: NodeProps<Node<StoryNode>
           className="flex items-center gap-1 px-2 py-1 bg-white rounded-lg shadow-lg border border-slate-200"
         >
           <button
-            onClick={() => setIsEditing(true)}
+            onClick={startEditing}
             className="p-1.5 hover:bg-slate-100 rounded transition-colors"
             title="Edit"
           >
