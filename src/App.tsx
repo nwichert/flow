@@ -98,8 +98,11 @@ function WorkflowCanvas({ isSidebarOpen }: { isSidebarOpen: boolean }) {
   };
 
   // Filter edges in presentation mode - only show edges where both nodes are visible
+  // Force all edges to smoothstep (orthogonal) in presentation mode
   const visibleEdges = isPresentationMode
-    ? edges.filter((edge) => isNodeShown(edge.source) && isNodeShown(edge.target))
+    ? edges
+        .filter((edge) => isNodeShown(edge.source) && isNodeShown(edge.target))
+        .map((edge) => ({ ...edge, type: 'smoothstep' }))
     : edges;
 
   const onNodeContextMenu: NodeMouseHandler = useCallback(
