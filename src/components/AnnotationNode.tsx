@@ -49,13 +49,22 @@ function FormattedText({ text, className }: { text: string; className?: string }
 export function AnnotationNode({ data, id, selected }: NodeProps<Node<StoryNode>>) {
   const [isEditing, setIsEditing] = useState(false);
   const [editData, setEditData] = useState(data);
+  const [orderInput, setOrderInput] = useState(String(data.order));
   const descriptionRef = useRef<HTMLTextAreaElement>(null);
-  const { updateNode, deleteNode, duplicateNode, isPresentationMode } = useStoryStore();
+  const { updateNode, deleteNode, duplicateNode, isPresentationMode, currentStepIndex, presentationOrder } = useStoryStore();
   const { showToast } = useToast();
   const { confirm } = useConfirm();
 
+  const currentNodeId = presentationOrder[currentStepIndex];
+  const nodeIndex = presentationOrder.indexOf(id);
+  const isActive = currentNodeId === id;
+  const hasBeenShown = nodeIndex !== -1 && nodeIndex < currentStepIndex;
+  const isVisible = !isPresentationMode || isActive || hasBeenShown;
+  const isDimmed = isPresentationMode && !isActive && hasBeenShown;
+
   const startEditing = () => {
     setEditData(data);
+    setOrderInput(String(data.order));
     setIsEditing(true);
   };
 
@@ -84,8 +93,7 @@ export function AnnotationNode({ data, id, selected }: NodeProps<Node<StoryNode>
     updateNode(id, {
       title: editData.title,
       description: editData.description,
-      codeContent: editData.codeContent,
-      showCode: editData.showCode,
+      order: parseInt(orderInput, 10) || 1,
     });
     setIsEditing(false);
     showToast('Annotation updated');
@@ -93,6 +101,7 @@ export function AnnotationNode({ data, id, selected }: NodeProps<Node<StoryNode>
 
   const handleCancel = () => {
     setEditData(data);
+    setOrderInput(String(data.order));
     setIsEditing(false);
   };
 
@@ -107,11 +116,6 @@ export function AnnotationNode({ data, id, selected }: NodeProps<Node<StoryNode>
       deleteNode(id);
       showToast(`Deleted "${data.title}"`);
     }
-  };
-
-  const handleToggleCode = () => {
-    const newShowCode = !data.showCode;
-    updateNode(id, { showCode: newShowCode });
   };
 
   const handles = (
@@ -134,6 +138,10 @@ export function AnnotationNode({ data, id, selected }: NodeProps<Node<StoryNode>
         className="!bg-[var(--color-primary-muted)] !w-2 !h-2 !border !border-white" />
     </>
   );
+
+  if (isPresentationMode && !isVisible) {
+    return null;
+  }
 
   if (isEditing && !isPresentationMode) {
     return (
@@ -184,25 +192,15 @@ export function AnnotationNode({ data, id, selected }: NodeProps<Node<StoryNode>
           </div>
 
           <div>
-            <label className="block text-slate-500 text-xs mb-1">Code Content</label>
-            <textarea
-              value={editData.codeContent || ''}
-              onChange={(e) => setEditData({ ...editData, codeContent: e.target.value })}
-              className="w-full px-2 py-1 bg-white/80 rounded text-slate-600 text-xs font-mono border border-slate-300 focus:border-[var(--color-primary-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-muted)]/30 resize-none"
-              rows={3}
-              placeholder="Code snippet..."
+            <label className="block text-slate-500 text-xs mb-1">Presentation Order</label>
+            <input
+              type="text"
+              inputMode="numeric"
+              value={orderInput}
+              onChange={(e) => setOrderInput(e.target.value.replace(/[^0-9]/g, ''))}
+              className="w-20 px-2 py-1 bg-white/80 rounded text-slate-700 text-sm text-center border border-slate-300 focus:border-[var(--color-primary-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-muted)]/30"
             />
           </div>
-
-          <label className="flex items-center gap-2 text-xs text-slate-500 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={editData.showCode || false}
-              onChange={(e) => setEditData({ ...editData, showCode: e.target.checked })}
-              className="rounded border-slate-300 text-[var(--color-primary)] focus:ring-[var(--color-primary)]"
-            />
-            Show code block
-          </label>
 
           <div className="flex gap-2">
             <button
@@ -266,26 +264,17 @@ export function AnnotationNode({ data, id, selected }: NodeProps<Node<StoryNode>
 
       <div
         className={`p-3 rounded-lg border-2 border-dashed shadow-md transition-all duration-300 bg-[var(--color-primary-faded)] border-[var(--color-primary-muted)] ${
-          isPresentationMode ? 'opacity-70 w-64' : 'w-60'
-        } ${selected && !isPresentationMode ? 'w-64' : ''}`}
+          isPresentationMode && isActive
+            ? 'ring-4 ring-[var(--color-primary)]/30 scale-105 shadow-xl w-68'
+            : isPresentationMode
+            ? 'w-64'
+            : 'w-60'
+        } ${isDimmed ? 'opacity-40' : ''} ${selected && !isPresentationMode ? 'w-64' : ''}`}
       >
         {handles}
 
-        <div className="flex items-center justify-between mb-2">
+        <div className="mb-2">
           <h3 className="font-medium text-slate-700 text-sm leading-tight">{data.title}</h3>
-          {!isPresentationMode && (
-            <button
-              onClick={handleToggleCode}
-              className={`p-1 rounded text-xs font-mono transition-colors ${
-                data.showCode
-                  ? 'bg-[var(--color-primary-muted)] text-white'
-                  : 'bg-white/60 text-slate-400 hover:text-slate-600 hover:bg-white/80'
-              }`}
-              title={data.showCode ? 'Hide code block' : 'Show code block'}
-            >
-              &lt;/&gt;
-            </button>
-          )}
         </div>
 
         {data.description && (
@@ -294,13 +283,6 @@ export function AnnotationNode({ data, id, selected }: NodeProps<Node<StoryNode>
           </div>
         )}
 
-        {data.showCode && data.codeContent && (
-          <div className="mt-2 p-2 bg-white/60 rounded border border-slate-200/50">
-            <pre className="text-slate-600 text-xs font-mono whitespace-pre-wrap break-words leading-relaxed">
-              {data.codeContent}
-            </pre>
-          </div>
-        )}
       </div>
     </>
   );

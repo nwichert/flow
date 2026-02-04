@@ -277,7 +277,6 @@ const createDefaultProject = (): Project => {
 const getPresentationOrder = (nodes: Node<StoryNode>[]) => {
   if (!nodes || nodes.length === 0) return [];
   return [...nodes]
-    .filter((n) => n.data?.nodeKind !== 'annotation')
     .sort((a, b) => (a.data?.order ?? 0) - (b.data?.order ?? 0))
     .map((n) => n.id);
 };
