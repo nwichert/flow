@@ -17,7 +17,7 @@ export function AddNodePanel({ isSidebarOpen }: AddNodePanelProps) {
     title: '',
     description: '',
     status: 'todo',
-    priority: 'medium',
+    priority: 'none',
   });
   const [annotationData, setAnnotationData] = useState({ title: '', description: '' });
   const { addNode, addAnnotationNode, activeStoryId } = useStoryStore();
@@ -37,7 +37,7 @@ export function AddNodePanel({ isSidebarOpen }: AddNodePanelProps) {
       title: '',
       description: '',
       status: 'todo',
-      priority: 'medium',
+      priority: 'none',
     });
     setIsOpen(false);
   };
@@ -173,6 +173,7 @@ export function AddNodePanel({ isSidebarOpen }: AddNodePanelProps) {
                   onChange={(e) => setFormData({ ...formData, priority: e.target.value as StoryNode['priority'] })}
                   className="w-full px-3 py-2 bg-slate-50 rounded text-slate-800 text-sm border border-slate-300 focus:border-[var(--color-primary)] focus:outline-none"
                 >
+                  <option value="none">None</option>
                   <option value="low">Low</option>
                   <option value="medium">Medium</option>
                   <option value="high">High</option>

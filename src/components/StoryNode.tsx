@@ -147,6 +147,7 @@ export function StoryNode({ data, id, selected }: NodeProps<Node<StoryNodeType>>
               onChange={(e) => setEditData({ ...editData, priority: e.target.value as StoryNodeType['priority'] })}
               className="w-full px-2 py-1 bg-slate-50 rounded text-slate-800 text-xs border border-slate-300 focus:border-violet-500 focus:outline-none"
             >
+              <option value="none">None</option>
               <option value="low">Low</option>
               <option value="medium">Medium</option>
               <option value="high">High</option>
@@ -287,11 +288,13 @@ export function StoryNode({ data, id, selected }: NodeProps<Node<StoryNodeType>>
 
         <p className={`text-slate-600 text-xs mb-3 ${(selected || isPresentationMode) ? '' : 'line-clamp-2'}`}>{data.description}</p>
 
-        <div className="flex items-center justify-end">
-          <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${priorityBadges[data.priority]}`}>
-            {data.priority}
-          </span>
-        </div>
+        {data.priority && data.priority !== 'none' && (
+          <div className="flex items-center justify-end">
+            <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${priorityBadges[data.priority]}`}>
+              {data.priority}
+            </span>
+          </div>
+        )}
 
         {/* Bottom handles - both source and target */}
         <Handle
