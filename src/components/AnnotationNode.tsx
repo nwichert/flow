@@ -4,11 +4,9 @@ import { useStoryStore, type StoryNode } from '../store/useStoryStore';
 import { useToast } from './Toast';
 import { useConfirm } from './ConfirmDialog';
 
-/** Render description text with **bold** and *italic* markdown syntax. */
-function FormattedText({ text, className }: { text: string; className?: string }) {
-  // Split on **bold** and *italic* markers, preserving delimiters
+/** Render inline **bold** and *italic* within a text segment. */
+function InlineFormatted({ text, keyPrefix }: { text: string; keyPrefix: string }) {
   const parts: React.ReactNode[] = [];
-  // Process bold first, then italic within each segment
   const boldRegex = /\*\*(.+?)\*\*/g;
   let lastIndex = 0;
   let match: RegExpExecArray | null;
@@ -34,16 +32,61 @@ function FormattedText({ text, className }: { text: string; className?: string }
 
   while ((match = boldRegex.exec(text)) !== null) {
     if (match.index > lastIndex) {
-      parts.push(...processItalic(text.slice(lastIndex, match.index), `t-${lastIndex}`));
+      parts.push(...processItalic(text.slice(lastIndex, match.index), `${keyPrefix}-${lastIndex}`));
     }
-    parts.push(<strong key={`b-${match.index}`}>{match[1]}</strong>);
+    parts.push(<strong key={`${keyPrefix}-b-${match.index}`}>{match[1]}</strong>);
     lastIndex = match.index + match[0].length;
   }
   if (lastIndex < text.length) {
-    parts.push(...processItalic(text.slice(lastIndex), `t-${lastIndex}`));
+    parts.push(...processItalic(text.slice(lastIndex), `${keyPrefix}-${lastIndex}`));
   }
 
-  return <span className={className}>{parts}</span>;
+  return <>{parts}</>;
+}
+
+/** Render description text with **bold**, *italic*, and `- ` bullet lists. */
+function FormattedText({ text, className }: { text: string; className?: string }) {
+  const lines = text.split('\n');
+  const elements: React.ReactNode[] = [];
+  let bulletItems: React.ReactNode[] = [];
+  let bulletKeyStart = 0;
+
+  const flushBullets = () => {
+    if (bulletItems.length > 0) {
+      elements.push(
+        <ul key={`ul-${bulletKeyStart}`} className="list-disc list-inside space-y-0.5 my-1">
+          {bulletItems}
+        </ul>
+      );
+      bulletItems = [];
+    }
+  };
+
+  lines.forEach((line, i) => {
+    if (line.startsWith('- ')) {
+      if (bulletItems.length === 0) bulletKeyStart = i;
+      bulletItems.push(
+        <li key={`li-${i}`}>
+          <InlineFormatted text={line.slice(2)} keyPrefix={`li-${i}`} />
+        </li>
+      );
+    } else {
+      flushBullets();
+      if (line.trim() === '' && i < lines.length - 1) {
+        elements.push(<br key={`br-${i}`} />);
+      } else {
+        elements.push(
+          <span key={`p-${i}`}>
+            {i > 0 && elements.length > 0 && !lines[i - 1].startsWith('- ') && lines[i - 1].trim() !== '' && '\n'}
+            <InlineFormatted text={line} keyPrefix={`p-${i}`} />
+          </span>
+        );
+      }
+    }
+  });
+  flushBullets();
+
+  return <span className={`${className || ''} whitespace-pre-wrap`}>{elements}</span>;
 }
 
 export function AnnotationNode({ data, id, selected }: NodeProps<Node<StoryNode>>) {
@@ -81,10 +124,39 @@ export function AnnotationNode({ data, id, selected }: NodeProps<Node<StoryNode>
     const newValue = `${before}${wrapper}${selected}${wrapper}${after}`;
     setEditData((prev) => ({ ...prev, description: newValue }));
 
-    // Restore cursor position after the wrapped text
     requestAnimationFrame(() => {
       textarea.focus();
       const newCursorPos = selectionEnd + wrapper.length * 2;
+      textarea.setSelectionRange(newCursorPos, newCursorPos);
+    });
+  }, []);
+
+  const insertBullet = useCallback(() => {
+    const textarea = descriptionRef.current;
+    if (!textarea) return;
+
+    const { selectionStart, value } = textarea;
+    // Find the start of the current line
+    const lineStart = value.lastIndexOf('\n', selectionStart - 1) + 1;
+    const before = value.slice(0, lineStart);
+    const lineContent = value.slice(lineStart);
+
+    let newValue: string;
+    let newCursorPos: number;
+
+    if (lineContent.startsWith('- ')) {
+      // Remove bullet from current line
+      newValue = before + lineContent.slice(2);
+      newCursorPos = Math.max(lineStart, selectionStart - 2);
+    } else {
+      // Add bullet to current line
+      newValue = before + '- ' + lineContent;
+      newCursorPos = selectionStart + 2;
+    }
+
+    setEditData((prev) => ({ ...prev, description: newValue }));
+    requestAnimationFrame(() => {
+      textarea.focus();
       textarea.setSelectionRange(newCursorPos, newCursorPos);
     });
   }, []);
@@ -179,7 +251,15 @@ export function AnnotationNode({ data, id, selected }: NodeProps<Node<StoryNode>
               >
                 I
               </button>
-              <span className="text-slate-400 text-[10px] ml-1">Select text, then click</span>
+              <button
+                type="button"
+                onClick={insertBullet}
+                className="px-1.5 py-0.5 bg-white/60 hover:bg-white/90 rounded text-slate-600 text-xs border border-slate-200 transition-colors"
+                title="Toggle bullet on current line"
+              >
+                &bull; List
+              </button>
+              <span className="text-slate-400 text-[10px] ml-1">Select text, then B/I</span>
             </div>
             <textarea
               ref={descriptionRef}
@@ -187,7 +267,7 @@ export function AnnotationNode({ data, id, selected }: NodeProps<Node<StoryNode>
               onChange={(e) => setEditData({ ...editData, description: e.target.value })}
               className="w-full px-2 py-1 bg-white/80 rounded text-slate-700 text-xs border border-slate-300 focus:border-[var(--color-primary-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-muted)]/30 resize-none"
               rows={3}
-              placeholder="Annotation text... use **bold** or *italic*"
+              placeholder="Annotation text...&#10;- Use bullets with '- '&#10;- **bold** and *italic* supported"
             />
           </div>
 
