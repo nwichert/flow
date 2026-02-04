@@ -458,8 +458,9 @@ export function SSDCanvas({ isSidebarOpen }: SSDCanvasProps) {
 
             {/* Message arrows */}
             {sortedMessages.map((message, index) => {
+              const msgStepIndex = presentationOrder.findIndex((group) => group.includes(message.id));
               const isVisible = !isPresentationMode ||
-                presentationOrder.indexOf(message.id) <= currentStepIndex;
+                (msgStepIndex !== -1 && msgStepIndex <= currentStepIndex);
 
               if (!isVisible) return null;
 
@@ -523,12 +524,13 @@ export function SSDCanvas({ isSidebarOpen }: SSDCanvasProps) {
 
           {/* Message boxes */}
           {sortedMessages.map((message, index) => {
+            const msgStepIndex2 = presentationOrder.findIndex((group) => group.includes(message.id));
             const isVisible = !isPresentationMode ||
-              presentationOrder.indexOf(message.id) <= currentStepIndex;
-            const isActive = isPresentationMode &&
-              presentationOrder[currentStepIndex] === message.id;
+              (msgStepIndex2 !== -1 && msgStepIndex2 <= currentStepIndex);
+            const currentGroup = presentationOrder[currentStepIndex] || [];
+            const isActive = isPresentationMode && currentGroup.includes(message.id);
             const isDimmed = isPresentationMode &&
-              presentationOrder.indexOf(message.id) < currentStepIndex;
+              msgStepIndex2 !== -1 && msgStepIndex2 < currentStepIndex;
             const isSelected = selectedId === `message-${message.id}`;
 
             if (!isVisible) return null;

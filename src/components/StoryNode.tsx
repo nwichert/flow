@@ -24,11 +24,10 @@ export function StoryNode({ data, id, selected }: NodeProps<Node<StoryNodeType>>
     setIsEditing(true);
   };
 
-  const currentNodeId = presentationOrder[currentStepIndex];
-  const nodeIndex = presentationOrder.indexOf(id);
-  const isActive = currentNodeId === id;
-  // Node is visible if: not in presentation mode, OR it's the active node, OR it was shown in a previous step
-  const hasBeenShown = nodeIndex !== -1 && nodeIndex < currentStepIndex;
+  const currentGroup = presentationOrder[currentStepIndex] || [];
+  const nodeStepIndex = presentationOrder.findIndex((group) => group.includes(id));
+  const isActive = currentGroup.includes(id);
+  const hasBeenShown = nodeStepIndex !== -1 && nodeStepIndex < currentStepIndex;
   const isVisible = !isPresentationMode || isActive || hasBeenShown;
   const isDimmed = isPresentationMode && !isActive && hasBeenShown;
 

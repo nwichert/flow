@@ -159,7 +159,7 @@ type StoryStore = {
   // Presentation mode
   isPresentationMode: boolean;
   currentStepIndex: number;
-  presentationOrder: string[];
+  presentationOrder: string[][];
 
   // React Flow handlers (for workflow)
   onNodesChange: OnNodesChange<Node<StoryNode>>;
@@ -274,17 +274,27 @@ const createDefaultProject = (): Project => {
   };
 };
 
-const getPresentationOrder = (nodes: Node<StoryNode>[]) => {
+const getPresentationOrder = (nodes: Node<StoryNode>[]): string[][] => {
   if (!nodes || nodes.length === 0) return [];
-  return [...nodes]
-    .sort((a, b) => (a.data?.order ?? 0) - (b.data?.order ?? 0))
-    .map((n) => n.id);
+  const sorted = [...nodes].sort((a, b) => (a.data?.order ?? 0) - (b.data?.order ?? 0));
+  const groups: string[][] = [];
+  let currentOrder: number | null = null;
+  for (const n of sorted) {
+    const order = n.data?.order ?? 0;
+    if (order === currentOrder && groups.length > 0) {
+      groups[groups.length - 1].push(n.id);
+    } else {
+      groups.push([n.id]);
+      currentOrder = order;
+    }
+  }
+  return groups;
 };
 
-const getMessagePresentationOrder = (messages: SSDMessage[]) => {
+const getMessagePresentationOrder = (messages: SSDMessage[]): string[][] => {
   return [...messages]
     .sort((a, b) => a.order - b.order)
-    .map((m) => m.id);
+    .map((m) => [m.id]);
 };
 
 let idCounter = 100;
@@ -1349,7 +1359,8 @@ export const useStoryStore = create<StoryStore>()(
 
     getCurrentNodeId: () => {
       const { presentationOrder, currentStepIndex } = get();
-      return presentationOrder[currentStepIndex] || null;
+      const group = presentationOrder[currentStepIndex];
+      return group?.[0] || null;
     },
 
     _saveActiveStory: () => {

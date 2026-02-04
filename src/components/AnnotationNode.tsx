@@ -55,10 +55,10 @@ export function AnnotationNode({ data, id, selected }: NodeProps<Node<StoryNode>
   const { showToast } = useToast();
   const { confirm } = useConfirm();
 
-  const currentNodeId = presentationOrder[currentStepIndex];
-  const nodeIndex = presentationOrder.indexOf(id);
-  const isActive = currentNodeId === id;
-  const hasBeenShown = nodeIndex !== -1 && nodeIndex < currentStepIndex;
+  const currentGroup = presentationOrder[currentStepIndex] || [];
+  const nodeStepIndex = presentationOrder.findIndex((group) => group.includes(id));
+  const isActive = currentGroup.includes(id);
+  const hasBeenShown = nodeStepIndex !== -1 && nodeStepIndex < currentStepIndex;
   const isVisible = !isPresentationMode || isActive || hasBeenShown;
   const isDimmed = isPresentationMode && !isActive && hasBeenShown;
 
@@ -265,7 +265,7 @@ export function AnnotationNode({ data, id, selected }: NodeProps<Node<StoryNode>
       <div
         className={`p-3 rounded-lg border-2 border-dashed shadow-md transition-all duration-300 bg-[var(--color-primary-faded)] border-[var(--color-primary-muted)] ${
           isPresentationMode && isActive
-            ? 'ring-4 ring-[var(--color-primary)]/30 scale-105 shadow-xl w-68'
+            ? 'ring-4 ring-[var(--color-primary)]/30 scale-105 shadow-xl w-72'
             : isPresentationMode
             ? 'w-64'
             : 'w-60'
@@ -278,7 +278,9 @@ export function AnnotationNode({ data, id, selected }: NodeProps<Node<StoryNode>
         </div>
 
         {data.description && (
-          <div className={`text-slate-600 text-xs mb-2 ${(selected || isPresentationMode) ? '' : 'line-clamp-3'}`}>
+          <div className={`text-slate-600 text-xs mb-2 ${
+            selected ? '' : isPresentationMode ? 'line-clamp-5' : 'line-clamp-3'
+          }`}>
             <FormattedText text={data.description} />
           </div>
         )}

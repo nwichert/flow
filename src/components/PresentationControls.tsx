@@ -39,53 +39,46 @@ function PresentationControlsInner({ isInsideReactFlow }: { isInsideReactFlow: b
   }
 
   // Compute effective presentation order - use store's order or compute from nodes
-  const effectiveOrder = useMemo(() => {
+  const effectiveOrder: string[][] = useMemo(() => {
     if (presentationOrder.length > 0) return presentationOrder;
     if (isWorkflow && nodes.length > 0) {
       return [...nodes]
         .sort((a, b) => (a.data?.order ?? 0) - (b.data?.order ?? 0))
-        .map(n => n.id);
+        .map(n => [n.id]);
     }
     if (!isWorkflow && messages.length > 0) {
       return [...messages]
         .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
-        .map(m => m.id);
+        .map(m => [m.id]);
     }
     return [];
   }, [presentationOrder, nodes, messages, isWorkflow]);
 
-  const currentId = effectiveOrder[currentStepIndex];
+  const currentGroup = effectiveOrder[currentStepIndex] || [];
+  const currentId = currentGroup[0];
   const currentNode = isWorkflow ? nodes.find((n) => n.id === currentId) : null;
   const currentMessage = !isWorkflow ? messages.find((m) => m.id === currentId) : null;
   const totalSteps = effectiveOrder.length;
   const isFirstStep = currentStepIndex === 0;
   const isLastStep = currentStepIndex === totalSteps - 1;
 
-  // Auto-focus on current node + connected annotations when step changes (workflow)
+  // Auto-focus on all nodes in the current group when step changes (workflow)
   useEffect(() => {
-    if (!isPresentationMode || !currentNode) return;
+    if (!isPresentationMode || currentGroup.length === 0) return;
 
-    // Find annotation nodes connected to the current node
-    const connectedAnnotationIds = edges
-      .filter((e) => e.source === currentNode.id || e.target === currentNode.id)
-      .map((e) => (e.source === currentNode.id ? e.target : e.source));
-
-    const connectedAnnotations = nodes.filter(
-      (n) => connectedAnnotationIds.includes(n.id) && n.data?.nodeKind === 'annotation'
-    );
-
-    // Collect all nodes to fit: current node + its annotations
-    const relevantNodes = [currentNode, ...connectedAnnotations];
+    // Gather all nodes in the current step group
+    const groupNodes = nodes.filter((n) => currentGroup.includes(n.id));
+    if (groupNodes.length === 0) return;
 
     // Estimate node dimensions (width x height)
-    const getNodeSize = (n: typeof currentNode) =>
+    const getNodeSize = (n: typeof groupNodes[0]) =>
       n.data?.nodeKind === 'annotation'
-        ? { w: 240, h: 150 }
+        ? { w: 288, h: 150 }
         : { w: 320, h: 120 };
 
     // Compute bounding box
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-    for (const n of relevantNodes) {
+    for (const n of groupNodes) {
       const { w, h } = getNodeSize(n);
       minX = Math.min(minX, n.position.x);
       minY = Math.min(minY, n.position.y);
@@ -93,7 +86,7 @@ function PresentationControlsInner({ isInsideReactFlow }: { isInsideReactFlow: b
       maxY = Math.max(maxY, n.position.y + h);
     }
 
-    if (fitBounds && connectedAnnotations.length > 0) {
+    if (fitBounds && groupNodes.length > 1) {
       fitBounds(
         { x: minX, y: minY, width: maxX - minX, height: maxY - minY },
         { duration: 500, padding: 0.3 }
@@ -103,7 +96,7 @@ function PresentationControlsInner({ isInsideReactFlow }: { isInsideReactFlow: b
       const cy = (minY + maxY) / 2;
       setCenter(cx, cy, { duration: 500, zoom: 1.2 });
     }
-  }, [isPresentationMode, currentStepIndex, currentNode, edges, nodes, setCenter, fitBounds]);
+  }, [isPresentationMode, currentStepIndex, currentGroup, nodes, setCenter, fitBounds]);
 
   // Keyboard navigation
   useEffect(() => {
@@ -127,7 +120,9 @@ function PresentationControlsInner({ isInsideReactFlow }: { isInsideReactFlow: b
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isPresentationMode, nextStep, prevStep, stopPresentation, fitView]);
 
-  const currentLabel = currentNode?.data?.title || currentMessage?.label || '';
+  const currentLabel = isWorkflow
+    ? currentGroup.map((nid) => nodes.find((n) => n.id === nid)?.data?.title).filter(Boolean).join(' + ')
+    : currentMessage?.label || '';
 
   if (!isPresentationMode) {
     // Check if there are items to present (nodes for workflow)

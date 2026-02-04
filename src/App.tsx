@@ -87,35 +87,19 @@ function WorkflowCanvas({ isSidebarOpen }: { isSidebarOpen: boolean }) {
   const [showSuggestionModal, setShowSuggestionModal] = useState(false);
 
   // Compute presentation order from nodes if store's order is empty
-  const effectivePresentationOrder = presentationOrder.length > 0
+  const effectivePresentationOrder: string[][] = presentationOrder.length > 0
     ? presentationOrder
-    : [...nodes].sort((a, b) => (a.data.order || 0) - (b.data.order || 0)).map(n => n.id);
+    : [...nodes].sort((a, b) => (a.data.order || 0) - (b.data.order || 0)).map(n => [n.id]);
+
+  // Helper: check if a node ID has been shown by the current step
+  const isNodeShown = (nodeId: string) => {
+    const stepIndex = effectivePresentationOrder.findIndex((group) => group.includes(nodeId));
+    return stepIndex !== -1 && stepIndex <= currentStepIndex;
+  };
 
   // Filter edges in presentation mode - only show edges where both nodes are visible
   const visibleEdges = isPresentationMode
-    ? edges.filter((edge) => {
-        // Annotation edges are always visible in presentation mode
-        const sourceNode = nodes.find((n) => n.id === edge.source);
-        const targetNode = nodes.find((n) => n.id === edge.target);
-        const isAnnotationEdge =
-          sourceNode?.data?.nodeKind === 'annotation' ||
-          targetNode?.data?.nodeKind === 'annotation';
-
-        if (isAnnotationEdge) {
-          // Show annotation edge if the non-annotation endpoint is visible
-          const otherNode = sourceNode?.data?.nodeKind === 'annotation' ? targetNode : sourceNode;
-          if (otherNode?.data?.nodeKind === 'annotation') return true; // both annotations
-          const otherIndex = effectivePresentationOrder.indexOf(otherNode?.id || '');
-          return otherIndex !== -1 && otherIndex <= currentStepIndex;
-        }
-
-        const sourceIndex = effectivePresentationOrder.indexOf(edge.source);
-        const targetIndex = effectivePresentationOrder.indexOf(edge.target);
-        // Both nodes must be visible (current step or earlier)
-        const sourceVisible = sourceIndex !== -1 && sourceIndex <= currentStepIndex;
-        const targetVisible = targetIndex !== -1 && targetIndex <= currentStepIndex;
-        return sourceVisible && targetVisible;
-      })
+    ? edges.filter((edge) => isNodeShown(edge.source) && isNodeShown(edge.target))
     : edges;
 
   const onNodeContextMenu: NodeMouseHandler = useCallback(
