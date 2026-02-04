@@ -1,5 +1,5 @@
 import { useEffect, useMemo } from 'react';
-import { Panel, useReactFlow } from '@xyflow/react';
+import { Panel, useReactFlow, type Rect } from '@xyflow/react';
 import { PlayIcon, ChevronLeftIcon, ChevronRightIcon, XMarkIcon } from '@heroicons/react/24/solid';
 import { useStoryStore } from '../store/useStoryStore';
 
@@ -9,6 +9,7 @@ function PresentationControlsInner({ isInsideReactFlow }: { isInsideReactFlow: b
     currentStepIndex,
     presentationOrder,
     nodes,
+    edges,
     messages,
     startPresentation,
     stopPresentation,
@@ -24,12 +25,14 @@ function PresentationControlsInner({ isInsideReactFlow }: { isInsideReactFlow: b
   // Only use ReactFlow hooks if we're inside ReactFlow
   let setCenter: ((x: number, y: number, opts?: { duration?: number; zoom?: number }) => void) | null = null;
   let fitView: ((opts?: { duration?: number }) => void) | null = null;
+  let fitBounds: ((bounds: Rect, opts?: { duration?: number; padding?: number }) => void) | null = null;
 
   if (isInsideReactFlow) {
     try {
       const reactFlow = useReactFlow();
       setCenter = reactFlow.setCenter;
       fitView = reactFlow.fitView;
+      fitBounds = reactFlow.fitBounds;
     } catch {
       // Not inside ReactFlow provider
     }
@@ -58,14 +61,49 @@ function PresentationControlsInner({ isInsideReactFlow }: { isInsideReactFlow: b
   const isFirstStep = currentStepIndex === 0;
   const isLastStep = currentStepIndex === totalSteps - 1;
 
-  // Auto-focus on current node when step changes (only for workflow)
+  // Auto-focus on current node + connected annotations when step changes (workflow)
   useEffect(() => {
-    if (isPresentationMode && currentNode && setCenter) {
-      const x = currentNode.position.x + 125;
-      const y = currentNode.position.y + 75;
-      setCenter(x, y, { duration: 500, zoom: 1.2 });
+    if (!isPresentationMode || !currentNode) return;
+
+    // Find annotation nodes connected to the current node
+    const connectedAnnotationIds = edges
+      .filter((e) => e.source === currentNode.id || e.target === currentNode.id)
+      .map((e) => (e.source === currentNode.id ? e.target : e.source));
+
+    const connectedAnnotations = nodes.filter(
+      (n) => connectedAnnotationIds.includes(n.id) && n.data?.nodeKind === 'annotation'
+    );
+
+    // Collect all nodes to fit: current node + its annotations
+    const relevantNodes = [currentNode, ...connectedAnnotations];
+
+    // Estimate node dimensions (width x height)
+    const getNodeSize = (n: typeof currentNode) =>
+      n.data?.nodeKind === 'annotation'
+        ? { w: 240, h: 150 }
+        : { w: 320, h: 120 };
+
+    // Compute bounding box
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (const n of relevantNodes) {
+      const { w, h } = getNodeSize(n);
+      minX = Math.min(minX, n.position.x);
+      minY = Math.min(minY, n.position.y);
+      maxX = Math.max(maxX, n.position.x + w);
+      maxY = Math.max(maxY, n.position.y + h);
     }
-  }, [isPresentationMode, currentStepIndex, currentNode, setCenter]);
+
+    if (fitBounds && connectedAnnotations.length > 0) {
+      fitBounds(
+        { x: minX, y: minY, width: maxX - minX, height: maxY - minY },
+        { duration: 500, padding: 0.3 }
+      );
+    } else if (setCenter) {
+      const cx = (minX + maxX) / 2;
+      const cy = (minY + maxY) / 2;
+      setCenter(cx, cy, { duration: 500, zoom: 1.2 });
+    }
+  }, [isPresentationMode, currentStepIndex, currentNode, edges, nodes, setCenter, fitBounds]);
 
   // Keyboard navigation
   useEffect(() => {

@@ -267,7 +267,7 @@ export function AnnotationNode({ data, id, selected }: NodeProps<Node<StoryNode>
         {handles}
 
         <div className="flex items-center justify-between mb-2">
-          <h3 className="font-medium text-slate-500 text-sm leading-tight">{data.title}</h3>
+          <h3 className="font-medium text-slate-700 text-sm leading-tight">{data.title}</h3>
           {!isPresentationMode && (
             <button
               onClick={handleToggleCode}
@@ -284,7 +284,7 @@ export function AnnotationNode({ data, id, selected }: NodeProps<Node<StoryNode>
         </div>
 
         {data.description && (
-          <div className={`text-slate-400 text-xs mb-2 ${(selected || isPresentationMode) ? '' : 'line-clamp-3'}`}>
+          <div className={`text-slate-600 text-xs mb-2 ${(selected || isPresentationMode) ? '' : 'line-clamp-3'}`}>
             <FormattedText text={data.description} />
           </div>
         )}
